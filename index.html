@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#3a2420">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="A cozy pixel-art hike through Bryce Canyon with your baby.">
+  <title>Hoodoo Hike</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%237ec3ef'/><rect x='5' y='4' width='6' height='12' fill='%23d9764f'/><rect x='4' y='2' width='8' height='3' fill='%23f3dcc4'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game">
+    <canvas id="screen" aria-label="Hoodoo Hike game"></canvas>
+    <div id="bubbles"></div>
+    <div id="toast"></div>
+    <div id="notes"></div>
+
+    <div id="hud" hidden>
+      <button id="babyPanel" class="wood" aria-label="Baby">
+        <img id="babyFace" alt="">
+        <span class="col">
+          <span id="babyLabel">Bean</span>
+          <span id="bondHearts" class="hearts"></span>
+        </span>
+        <span id="needIcon"></span>
+      </button>
+      <div id="clock" class="wood">
+        <span id="clockIcon">☀️</span>
+        <span class="col"><b id="clockTime">7:00 am</b><small id="clockLabel">Morning</small></span>
+        <button id="btnMute" aria-label="Toggle sound">🔊</button>
+      </div>
+      <div id="toolbar">
+        <div id="hotbar"></div>
+        <button id="btnBag" class="tool" title="Bag (I)" aria-label="Bag">🎒</button>
+        <button id="btnJournal" class="tool" title="Journal (J)" aria-label="Journal">📔</button>
+        <button id="btnPhoto" class="tool" title="Take photo (P)" aria-label="Take photo">📷</button>
+        <button id="btnAlbum" class="tool" title="Photo album" aria-label="Photo album">🖼️</button>
+      </div>
+    </div>
+
+    <div id="menu" class="parchment" hidden>
+      <div id="menuHead"><button id="menuBack" aria-label="Back" hidden>◀</button><img id="menuPortrait" alt="" hidden><span id="menuTitle"></span><button id="menuClose" aria-label="Close">✕</button></div>
+      <div id="menuActions"></div>
+    </div>
+
+    <div id="dialogue" class="parchment" hidden>
+      <div id="dlgBody">
+        <div id="dlgText"></div>
+        <div id="dlgChoices"></div>
+        <div id="dlgNext">▼</div>
+      </div>
+      <div id="dlgSide">
+        <div id="dlgPortraitBox"><img id="dlgPortrait" alt=""></div>
+        <div id="dlgName"></div>
+        <div id="dlgHearts" class="hearts"></div>
+      </div>
+    </div>
+
+    <div id="flash"></div>
+
+    <div id="bag" class="panel" hidden>
+      <div class="card parchment">
+        <div class="cardHead"><h2 id="bagTitle">Bag</h2><button class="close" id="bagClose" aria-label="Close">✕</button></div>
+        <div id="bagGrid"></div>
+        <div id="bagDetail">
+          <img id="bagIcon" alt="">
+          <div class="col"><b id="bagName">Tap an item</b><small id="bagDesc">Things you pick up on the trail go here.</small></div>
+          <div id="bagActions"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="journal" class="panel" hidden>
+      <div class="card parchment">
+        <div class="cardHead"><h2>Hike Journal</h2><button class="close" id="journalClose" aria-label="Close">✕</button></div>
+        <div id="journalTabs">
+          <button data-tab="wildlife">🐾 Wildlife</button>
+          <button data-tab="friends">💛 Friends</button>
+          <button data-tab="finds">🎒 Finds</button>
+          <button data-tab="badges">🏅 Badges</button>
+          <button data-tab="baby">👶 Baby</button>
+        </div>
+        <div id="journalBody"></div>
+      </div>
+    </div>
+
+    <div id="album" class="panel" hidden>
+      <div class="card parchment">
+        <div class="cardHead"><h2>Trail Photos</h2><button class="close" id="albumClose" aria-label="Close">✕</button></div>
+        <div id="albumGrid"></div>
+        <p id="albumEmpty">No photos yet — tap 📷 on the trail to take one!</p>
+        <div id="albumView" hidden>
+          <img id="albumImg" alt="Trail photo">
+          <div class="row">
+            <a id="albumSave" class="btn" download="hoodoo-hike.png">Save</a>
+            <button id="albumDelete" class="btn">Delete</button>
+            <button id="albumBack" class="btn">Back</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="title" class="panel">
+      <div class="card parchment titleCard">
+        <div class="titleLeft">
+          <h1>Hoodoo Hike</h1>
+          <p class="sub">A cozy walk through Bryce Canyon</p>
+          <canvas id="preview" width="48" height="36"></canvas>
+          <button id="startBtn" class="big">Start the hike ▶</button>
+          <p id="saveNote" class="hint" hidden>Your journal, friends and bag are saved.</p>
+        </div>
+        <div class="titleRight">
+          <div class="opt"><label>Skin</label><div class="swatches" data-key="skin"></div></div>
+          <div class="opt"><label>Hair</label><div class="swatches" data-key="hair"></div></div>
+          <div class="opt"><label>Style</label><div class="swatches" data-key="style"></div></div>
+          <div class="opt"><label>Shirt</label><div class="swatches" data-key="shirt"></div></div>
+          <div class="opt"><label>Carrier</label><div class="swatches" data-key="carrier"></div></div>
+          <div class="opt"><label for="babyName">Baby</label><input id="babyName" maxlength="12" value="Bean" autocomplete="off"></div>
+          <p class="hint">Tap to walk · tap things to interact · tap your baby when they need you<br>Keys: ← → move · E interact · B baby · I bag · J journal · P photo</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="rotate">
+    <div class="phone">📱</div>
+    <p>Turn your phone sideways to hike!</p>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

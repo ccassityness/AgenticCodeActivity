@@ -2,9 +2,9 @@
 import {
   drawHuman, drawManatee, drawAlligator, drawTurtle, drawHeron, drawEgret, drawIbis, drawAnhinga,
   drawOsprey, drawOtter, drawArmadillo, drawGar, drawFish, drawBarredOwl, shadowBlob, OPTIONS, randomLook,
-} from './figures.js';
-import { groundY, WATER_Y, bottomY } from './world.js';
-import { snapshot, lin, rng } from './color.js';
+} from './figures.js?v=20261115b';
+import { groundY, WATER_Y, bottomY } from './world.js?v=20261115b';
+import { snapshot, lin, rng } from './color.js?v=20261115b';
 
 const pick = a => a[(Math.random() * a.length) | 0];
 const rand = (a, b) => a + Math.random() * (b - a);

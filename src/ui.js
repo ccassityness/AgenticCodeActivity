@@ -1,6 +1,6 @@
 // DOM UI over the canvas: speech bubbles, the baby's thought bubble, menus, dialogue, toast,
 // notifications, clock and photo album.
-import { NEEDS } from './baby.js';
+import { NEEDS } from './baby.js?v=20261115b';
 
 const $ = id => document.getElementById(id);
 

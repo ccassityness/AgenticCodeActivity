@@ -1,5 +1,5 @@
 // Canvas effects: floating hearts, sparkles, music notes, emote bubbles, rain and dust motes.
-import { circle } from './color.js';
+import { circle } from './color.js?v=20261115b';
 
 function heart(ctx, x, y, s, col = '#e8506a') {
   ctx.fillStyle = col;

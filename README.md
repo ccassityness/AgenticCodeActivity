@@ -56,7 +56,13 @@ starts at a spot along the trail (0–3600), `?t=0.55` sets the time of day (0�
 speeds up the day.
 
 ### Deploying
-GitHub Pages publishes the site from `main`.
+GitHub Pages publishes the site from `main`. Every asset URL carries a version tag (`?v=…` on
+`style.css`, `src/main.js` and every module import), so browsers never mix old cached files with new
+ones. When you change any CSS or JS file, bump that tag everywhere, e.g.:
+
+```bash
+sed -i -E "s/v=[0-9a-z]+/v=NEWVERSION/g" index.html src/*.js
+```
 
 ### How it's made
 | File | What it does |

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#2a2342">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="A cozy pixel-art hike through Bryce Canyon with your baby.">
+  <title>Hoodoo Hike</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%237ec3ef'/><rect x='5' y='4' width='6' height='12' fill='%23d9764f'/><rect x='4' y='2' width='8' height='3' fill='%23f3dcc4'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game">
+    <canvas id="screen" aria-label="Hoodoo Hike game"></canvas>
+    <div id="bubbles"></div>
+    <div id="toast"></div>
+
+    <div id="hud" hidden>
+      <div id="status"><span id="mood">😊</span><span id="babyLabel">Bean</span></div>
+      <div id="buttons">
+        <button id="btnBaby" title="Baby (B)" aria-label="Baby">👶</button>
+        <button id="btnPhoto" title="Take photo (P)" aria-label="Take photo">📷</button>
+        <button id="btnAlbum" title="Photo album" aria-label="Photo album">🖼️</button>
+        <button id="btnMute" title="Sound (M)" aria-label="Toggle sound">🔊</button>
+      </div>
+    </div>
+
+    <div id="menu" hidden>
+      <div id="menuHead"><span id="menuTitle"></span><button id="menuClose" aria-label="Close">✕</button></div>
+      <div id="menuActions"></div>
+    </div>
+
+    <div id="dialogue" hidden>
+      <div id="dlgName"></div>
+      <div id="dlgText"></div>
+      <div id="dlgNext">▼</div>
+    </div>
+
+    <div id="flash"></div>
+
+    <div id="album" class="panel" hidden>
+      <div class="card">
+        <div class="cardHead"><h2>Trail Photos</h2><button id="albumClose" aria-label="Close">✕</button></div>
+        <div id="albumGrid"></div>
+        <p id="albumEmpty">No photos yet — tap 📷 on the trail to take one!</p>
+        <div id="albumView" hidden>
+          <img id="albumImg" alt="Trail photo">
+          <div class="row">
+            <a id="albumSave" download="hoodoo-hike.png">Save</a>
+            <button id="albumDelete">Delete</button>
+            <button id="albumBack">Back</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="title" class="panel">
+      <div class="card titleCard">
+        <div class="titleLeft">
+          <h1>Hoodoo Hike</h1>
+          <p class="sub">A cozy walk through Bryce Canyon</p>
+          <canvas id="preview" width="48" height="36"></canvas>
+          <button id="startBtn" class="big">Start the hike ▶</button>
+        </div>
+        <div class="titleRight">
+          <div class="opt"><label>Skin</label><div class="swatches" data-key="skin"></div></div>
+          <div class="opt"><label>Hair</label><div class="swatches" data-key="hair"></div></div>
+          <div class="opt"><label>Style</label><div class="swatches" data-key="style"></div></div>
+          <div class="opt"><label>Shirt</label><div class="swatches" data-key="shirt"></div></div>
+          <div class="opt"><label>Carrier</label><div class="swatches" data-key="carrier"></div></div>
+          <div class="opt"><label for="babyName">Baby</label><input id="babyName" maxlength="12" value="Bean" autocomplete="off"></div>
+          <p class="hint">Tap to walk · tap things to interact<br>Keys: ← → move · E interact · B baby · P photo</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="rotate">
+    <div class="phone">📱</div>
+    <p>Turn your phone sideways to hike!</p>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

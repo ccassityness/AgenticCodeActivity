@@ -1,6 +1,6 @@
 // Naturalistic figures drawn with layered, softly shaded shapes (no outlines), in world units.
 // Light comes from the upper left. Figures face right (+x) and are mirrored for left.
-import { shade, mix, rgba, ellipse, circle, lin, rad, canvas, rng } from './color.js?v=20261115b';
+import { shade, mix, rgba, ellipse, circle, lin, rad, canvas, rng } from './color.js?v=20261116a';
 
 const TAU = Math.PI * 2;
 
@@ -91,7 +91,7 @@ export function fabric(ctx, color, pattern, scale = 0.06) {
 
 // ------------------------------------------------------------------ helpers
 /** Tapered limb segment with a soft cylindrical shade. */
-function seg(ctx, ax, ay, bx, by, wa, wb, col, lightAmt = 0.14, darkAmt = 0.22) {
+function seg(ctx, ax, ay, bx, by, wa, wb, col, lightAmt = 0.1, darkAmt = 0.16) {
   const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 0.001;
   const nx = -dy / L, ny = dx / L;
   if (typeof col === 'string') {
@@ -310,8 +310,8 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
     } else {
       const tall = p.shoes === 'boots' ? 2.4 : 1.2;
       ctx.fillStyle = lin(ctx, 0, -tall, 0, 0.6, [[0, shade(sc, 0.1)], [1, shade(sc, -0.15)]]);
-      ctx.beginPath(); ctx.moveTo(-1.0, -tall); ctx.lineTo(0.9, -tall); ctx.lineTo(1.2, -0.9); ctx.quadraticCurveTo(3.3, -0.8, 3.2, 0.3); ctx.lineTo(-1.1, 0.3); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = p.shoes === 'boots' ? '#3a2a1e' : '#e8e4dc'; ctx.fillRect(-1.1, 0.05, 4.35, 0.55);
+      ctx.beginPath(); ctx.moveTo(-0.9, -tall); ctx.lineTo(0.8, -tall); ctx.lineTo(1.0, -0.9); ctx.quadraticCurveTo(2.9, -0.8, 2.8, 0.3); ctx.lineTo(-1.0, 0.3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = p.shoes === 'boots' ? '#3a2a1e' : '#e8e4dc'; ctx.fillRect(-1.0, 0.05, 3.85, 0.5);
       if (p.shoes === 'sneakers') { ctx.strokeStyle = shade(sc, -0.3); ctx.lineWidth = 0.15; ctx.beginPath(); ctx.moveTo(0.4, -1.0); ctx.lineTo(1.4, -0.7); ctx.stroke(); }
     }
     ctx.restore();
@@ -334,11 +334,14 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
     const ex = sx + Math.sin(ua) * UA, ey = sy + Math.cos(ua) * UA;
     const hx = ex + Math.sin(ua - fa) * FA, hy = ey + Math.cos(ua - fa) * FA;
     const sk = shade(skin, dim), cl = shade(topC, dim);
-    seg(ctx, sx, sy, ex, ey, 2.4 * B, 1.9 * B, sk);
-    seg(ctx, ex, ey, hx, hy, 1.9 * B, 1.45 * B, sleeve >= 1 ? cl : sk);
-    if (sleeve > 0) seg(ctx, sx, sy, sx + (ex - sx) * Math.min(1, sleeve * 1.6), sy + (ey - sy) * Math.min(1, sleeve * 1.6), 2.9 * B, 2.6 * B, cl);
+    seg(ctx, sx, sy, ex, ey, 2.05 * B, 1.6 * B, sk);
+    seg(ctx, ex, ey, hx, hy, 1.6 * B, 1.15 * B, sleeve >= 1 ? cl : sk);
+    if (sleeve > 0) { const k = Math.min(1, sleeve * 1.6); seg(ctx, sx, sy, sx + (ex - sx) * k, sy + (ey - sy) * k, 2.45 * B, 2.05 * B, cl); }
     // hand
-    ctx.fillStyle = sk; ctx.beginPath(); ctx.ellipse(hx, hy + 0.3, 0.85, 1.05, ua - fa, 0, TAU); ctx.fill();
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(-(ua - fa));
+    ctx.fillStyle = sk; ctx.beginPath(); ctx.ellipse(0, 0.55, 0.78, 1.05, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = shade(sk, -0.06); ctx.beginPath(); ctx.ellipse(0.62, 0.2, 0.3, 0.58, -0.55, 0, TAU); ctx.fill();
+    ctx.restore();
     return { hx, hy };
   };
 
@@ -367,7 +370,7 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
   drawLeg(lb, true);
 
   // ---- torso ----
-  ctx.fillStyle = shade(skin, -0.08); ctx.beginPath(); ctx.roundRect(-0.6, shY - 1.9 * H, 1.9, 2.4 * H, 0.6); ctx.fill();   // neck
+  ctx.fillStyle = lin(ctx, -0.6, 0, 1.4, 0, [[0, shade(skin, -0.14)], [1, shade(skin, -0.02)]]); ctx.beginPath(); ctx.roundRect(-0.5, shY - 1.6 * H, 1.8, 2.1 * H, 0.7); ctx.fill();   // neck
   const torsoPath = () => {
     ctx.beginPath();
     ctx.moveTo(-back, 0.3);
@@ -403,7 +406,7 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
   if (p.ranger) { ctx.fillStyle = '#d8b040'; ctx.beginPath(); ctx.ellipse(chest * 0.5, shY + 2.4, 0.45, 0.55, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#5a4a2a'; ctx.fillRect(-back, -0.8, back + chest * 0.85, 0.7); }
 
   // ---- head ----
-  const hR = 1.85 * H, hcx = 0.55, hcy = shY - 2.1 * H - hR * 0.95;
+  const hR = 2.0 * H, hcx = 0.45, hcy = shY - 1.2 * H - hR * 0.95;
   const hair = p.hair || '#3a2618';
   const hairFill = (y0, y1) => lin(ctx, 0, y0, 0, y1, [[0, shade(hair, 0.15)], [1, shade(hair, -0.15)]]);
   const hairTexture = (n, len, spread) => {
@@ -419,33 +422,62 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
     else for (let i = 0; i < 3; i++) { for (let k = 0; k < 6; k++) { ctx.fillStyle = k % 2 ? hair : shade(hair, 0.18); ctx.beginPath(); ctx.ellipse(hcx - hR * 0.8 - i * 0.55, hcy + hR * 0.4 + k * 1.15, 0.45, 0.7, 0.2, 0, TAU); ctx.fill(); } }
   }
   if (style === 'afro') { ctx.fillStyle = rad(ctx, hcx - 0.6, hcy - 1, 0.5, hR * 1.9, [[0, shade(hair, 0.12)], [1, shade(hair, -0.12)]]); circle(ctx, hcx - hR * 0.3, hcy - hR * 0.35, hR * 1.62); ctx.fill(); }
-  // skull + face
-  ctx.fillStyle = rad(ctx, hcx - hR * 0.35, hcy - hR * 0.45, hR * 0.15, hR * 1.45, [[0, shade(skin, 0.13)], [0.65, skin], [1, shade(skin, -0.16)]]);
-  ctx.beginPath(); ctx.ellipse(hcx, hcy, hR * 0.95, hR, 0, 0, TAU); ctx.fill();
-  // jaw + chin
-  ctx.beginPath(); ctx.moveTo(hcx - hR * 0.5, hcy + hR * 0.4); ctx.quadraticCurveTo(hcx + hR * 0.2, hcy + hR * 1.25, hcx + hR * 0.82, hcy + hR * 0.95); ctx.quadraticCurveTo(hcx + hR * 1.0, hcy + hR * 0.55, hcx + hR * 0.9, hcy + hR * 0.2); ctx.fill();
-  // nose
-  ctx.fillStyle = shade(skin, -0.05);
-  ctx.beginPath(); ctx.moveTo(hcx + hR * 0.86, hcy - hR * 0.15); ctx.quadraticCurveTo(hcx + hR * 1.22, hcy + hR * 0.32, hcx + hR * 0.95, hcy + hR * 0.42); ctx.lineTo(hcx + hR * 0.82, hcy + hR * 0.38); ctx.fill();
+  // skull + face, turned three-quarters toward the viewer
+  const skinLit = shade(skin, 0.1), skinSh = shade(skin, -0.12);
+  ctx.fillStyle = rad(ctx, hcx + hR * 0.15, hcy - hR * 0.35, hR * 0.2, hR * 1.55, [[0, skinLit], [0.6, skin], [1, skinSh]]);
+  ctx.beginPath();
+  ctx.moveTo(hcx - hR * 0.92, hcy);
+  ctx.bezierCurveTo(hcx - hR * 0.95, hcy - hR * 1.12, hcx + hR * 0.88, hcy - hR * 1.16, hcx + hR * 0.93, hcy - hR * 0.08);
+  ctx.bezierCurveTo(hcx + hR * 0.98, hcy + hR * 0.55, hcx + hR * 0.72, hcy + hR * 1.02, hcx + hR * 0.28, hcy + hR * 1.08);
+  ctx.bezierCurveTo(hcx - hR * 0.28, hcy + hR * 1.1, hcx - hR * 0.86, hcy + hR * 0.72, hcx - hR * 0.92, hcy);
+  ctx.fill();
   // ear
-  ctx.fillStyle = shade(skin, -0.1); ctx.beginPath(); ctx.ellipse(hcx - hR * 0.18, hcy + hR * 0.1, hR * 0.2, hR * 0.3, 0.15, 0, TAU); ctx.fill();
-  // eye, brow, lips
-  const ex = hcx + hR * 0.58, ey = hcy - hR * 0.05;
+  ctx.fillStyle = shade(skin, -0.05); ctx.beginPath(); ctx.ellipse(hcx - hR * 0.66, hcy + hR * 0.14, hR * 0.17, hR * 0.27, 0.1, 0, TAU); ctx.fill();
+  ctx.fillStyle = rgba(shade(skin, -0.3), 0.35); ctx.beginPath(); ctx.ellipse(hcx - hR * 0.64, hcy + hR * 0.16, hR * 0.07, hR * 0.13, 0.1, 0, TAU); ctx.fill();
+  // cheeks
+  ctx.fillStyle = 'rgba(225,120,110,0.16)';
+  circle(ctx, hcx - hR * 0.08, hcy + hR * 0.42, hR * 0.22); ctx.fill();
+  circle(ctx, hcx + hR * 0.74, hcy + hR * 0.4, hR * 0.15); ctx.fill();
+  // eyes: near eye full, far eye slightly foreshortened
+  const eyeY = hcy + hR * 0.02;
+  const EYES = [[hcx + hR * 0.12, 1], [hcx + hR * 0.62, 0.78]];
+  const ex = hcx + hR * 0.37, ey = eyeY;
   if (p.glasses !== 'sun') {
-    ctx.fillStyle = '#f6f0ea'; ctx.beginPath(); ctx.ellipse(ex, ey, hR * 0.17, hR * 0.1, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = p.eyes || '#4a3426'; circle(ctx, ex + hR * 0.06, ey, hR * 0.085); ctx.fill();
-    ctx.fillStyle = '#1e1612'; circle(ctx, ex + hR * 0.07, ey, hR * 0.04); ctx.fill();
+    for (const [exx, sx] of EYES) {
+      ctx.fillStyle = '#f8f3ee'; ctx.beginPath(); ctx.ellipse(exx, eyeY, hR * 0.15 * sx, hR * 0.095, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.beginPath(); ctx.ellipse(exx, eyeY, hR * 0.15 * sx, hR * 0.095, 0, 0, TAU); ctx.clip();
+      ctx.fillStyle = p.eyes || '#4a3426'; circle(ctx, exx + hR * 0.02, eyeY + hR * 0.01, hR * 0.085); ctx.fill();
+      ctx.fillStyle = '#1e1612'; circle(ctx, exx + hR * 0.02, eyeY + hR * 0.01, hR * 0.04); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = 'rgba(255,255,255,0.95)'; circle(ctx, exx + hR * 0.05, eyeY - hR * 0.025, hR * 0.022); ctx.fill();
+      ctx.strokeStyle = shade(skin, -0.5); ctx.lineWidth = hR * 0.045; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.ellipse(exx, eyeY + hR * 0.015, hR * 0.16 * sx, hR * 0.11, 0, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+    }
   }
-  ctx.strokeStyle = rgba(shade(hair, -0.1), 0.85); ctx.lineWidth = hR * 0.09; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(ex - hR * 0.2, ey - hR * 0.25); ctx.quadraticCurveTo(ex, ey - hR * 0.33, ex + hR * 0.2, ey - hR * 0.26); ctx.stroke();
-  ctx.strokeStyle = shade(skin, -0.32); ctx.lineWidth = hR * 0.07;
-  ctx.beginPath(); ctx.moveTo(hcx + hR * 0.62, hcy + hR * 0.68); ctx.quadraticCurveTo(hcx + hR * 0.76, hcy + hR * 0.74, hcx + hR * 0.88, hcy + hR * 0.66); ctx.stroke();
-  ctx.fillStyle = 'rgba(220,120,110,0.14)'; circle(ctx, hcx + hR * 0.42, hcy + hR * 0.38, hR * 0.28); ctx.fill();
-  if (p.freckles) { ctx.fillStyle = rgba(shade(skin, -0.35), 0.6); const r = rng(3); for (let i = 0; i < 8; i++) { circle(ctx, hcx + hR * (0.3 + r() * 0.5), hcy + hR * (0.15 + r() * 0.3), hR * 0.035); ctx.fill(); } }
+  // brows
+  ctx.strokeStyle = rgba(shade(hair, -0.05), 0.75); ctx.lineWidth = hR * 0.065; ctx.lineCap = 'round';
+  for (const [exx, sx] of EYES) { ctx.beginPath(); ctx.moveTo(exx - hR * 0.15 * sx, eyeY - hR * 0.2); ctx.quadraticCurveTo(exx, eyeY - hR * 0.29, exx + hR * 0.16 * sx, eyeY - hR * 0.23); ctx.stroke(); }
+  // nose: a soft side shadow and tip
+  ctx.strokeStyle = rgba(shade(skin, -0.3), 0.7); ctx.lineWidth = hR * 0.05;
+  ctx.beginPath(); ctx.moveTo(hcx + hR * 0.42, eyeY + hR * 0.08); ctx.quadraticCurveTo(hcx + hR * 0.52, eyeY + hR * 0.36, hcx + hR * 0.44, eyeY + hR * 0.42); ctx.stroke();
+  ctx.fillStyle = rgba(shade(skin, -0.35), 0.45); ctx.beginPath(); ctx.ellipse(hcx + hR * 0.38, eyeY + hR * 0.43, hR * 0.05, hR * 0.03, 0, 0, TAU); ctx.fill();
+  // a gentle smile
+  ctx.strokeStyle = mix(skin, '#9a3a3a', 0.5); ctx.lineWidth = hR * 0.06;
+  ctx.beginPath(); ctx.arc(hcx + hR * 0.36, hcy + hR * 0.5, hR * 0.2, Math.PI * 0.28, Math.PI * 0.72); ctx.stroke();
+  ctx.fillStyle = rgba(mix(skin, '#c06060', 0.4), 0.5); ctx.beginPath(); ctx.ellipse(hcx + hR * 0.36, hcy + hR * 0.76, hR * 0.12, hR * 0.04, 0, 0, TAU); ctx.fill();
+  if (p.freckles) { ctx.fillStyle = rgba(shade(skin, -0.35), 0.55); const r = rng(3); for (let i = 0; i < 10; i++) { circle(ctx, hcx + hR * (0.0 + r() * 0.8), hcy + hR * (0.2 + r() * 0.22), hR * 0.03); ctx.fill(); } }
   // facial hair
-  if (p.facial === 'stubble') { ctx.fillStyle = rgba(hair, 0.28); ctx.beginPath(); ctx.moveTo(hcx - hR * 0.3, hcy + hR * 0.35); ctx.quadraticCurveTo(hcx + hR * 0.2, hcy + hR * 1.25, hcx + hR * 0.85, hcy + hR * 0.95); ctx.lineTo(hcx + hR * 0.9, hcy + hR * 0.5); ctx.quadraticCurveTo(hcx + hR * 0.3, hcy + hR * 0.6, hcx - hR * 0.3, hcy + hR * 0.35); ctx.fill(); }
-  if (p.facial === 'mustache' || p.facial === 'beard') { ctx.fillStyle = hair; ctx.beginPath(); ctx.ellipse(hcx + hR * 0.78, hcy + hR * 0.55, hR * 0.24, hR * 0.09, -0.15, 0, TAU); ctx.fill(); }
-  if (p.facial === 'beard') { ctx.fillStyle = hairFill(hcy, hcy + hR * 1.4); ctx.beginPath(); ctx.moveTo(hcx - hR * 0.35, hcy + hR * 0.2); ctx.quadraticCurveTo(hcx - hR * 0.1, hcy + hR * 1.45, hcx + hR * 0.7, hcy + hR * 1.15); ctx.quadraticCurveTo(hcx + hR * 1.0, hcy + hR * 0.85, hcx + hR * 0.9, hcy + hR * 0.62); ctx.quadraticCurveTo(hcx + hR * 0.6, hcy + hR * 0.82, hcx + hR * 0.4, hcy + hR * 0.6); ctx.quadraticCurveTo(hcx + hR * 0.1, hcy + hR * 0.5, hcx - hR * 0.35, hcy + hR * 0.2); ctx.fill(); }
+  if (p.facial === 'stubble' || p.facial === 'beard') {
+    ctx.fillStyle = p.facial === 'beard' ? hairFill(hcy, hcy + hR * 1.3) : rgba(hair, 0.22);
+    ctx.beginPath();
+    ctx.moveTo(hcx - hR * 0.62, hcy + hR * 0.2);
+    ctx.bezierCurveTo(hcx - hR * 0.55, hcy + hR * (p.facial === 'beard' ? 1.0 : 0.8), hcx - hR * 0.1, hcy + hR * (p.facial === 'beard' ? 1.35 : 1.1), hcx + hR * 0.3, hcy + hR * (p.facial === 'beard' ? 1.3 : 1.08));
+    ctx.bezierCurveTo(hcx + hR * 0.75, hcy + hR * 1.15, hcx + hR * 0.95, hcy + hR * 0.6, hcx + hR * 0.9, hcy + hR * 0.25);
+    ctx.quadraticCurveTo(hcx + hR * 0.7, hcy + hR * 0.62, hcx + hR * 0.36, hcy + hR * 0.82);
+    ctx.quadraticCurveTo(hcx + hR * 0.0, hcy + hR * 0.62, hcx - hR * 0.62, hcy + hR * 0.2);
+    ctx.fill();
+  }
+  if (p.facial === 'mustache' || p.facial === 'beard') { ctx.fillStyle = hair; ctx.beginPath(); ctx.ellipse(hcx + hR * 0.38, hcy + hR * 0.52, hR * 0.24, hR * 0.075, 0.05, Math.PI, TAU); ctx.fill(); ctx.beginPath(); ctx.ellipse(hcx + hR * 0.38, hcy + hR * 0.52, hR * 0.24, hR * 0.05, 0.05, 0, Math.PI); ctx.fill(); }
   // hair on top
   if (style !== 'bald' && style !== 'afro') {
     ctx.fillStyle = hairFill(hcy - hR * 1.2, hcy + hR * 0.4);
@@ -467,7 +499,7 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
     if (style === 'ponytail') { const sw = Math.sin(t * 3) * 0.25; ctx.fillStyle = hairFill(hcy - hR, hcy + hR * 2.5); ctx.beginPath(); ctx.moveTo(hcx - hR * 0.85, hcy - hR * 0.45); ctx.quadraticCurveTo(hcx - hR * 2.0, hcy + hR * 0.3 + sw, hcx - hR * 1.4 + sw, hcy + hR * 2.4); ctx.quadraticCurveTo(hcx - hR * 1.3, hcy + hR * 0.4, hcx - hR * 0.7, hcy - hR * 0.1); ctx.fill(); ctx.fillStyle = shade(hair, -0.3); circle(ctx, hcx - hR * 0.95, hcy - hR * 0.32, hR * 0.15); ctx.fill(); }
     if (style === 'bun') { ctx.fillStyle = rad(ctx, hcx - hR * 0.8, hcy - hR * 1.05, 0, hR * 0.6, [[0, shade(hair, 0.15)], [1, shade(hair, -0.12)]]); circle(ctx, hcx - hR * 0.72, hcy - hR * 0.9, hR * 0.52); ctx.fill(); }
   }
-  if (style === 'afro') { ctx.fillStyle = rgba(shade(hair, 0.2), 0.3); const r = rng(5); for (let i = 0; i < 30; i++) { circle(ctx, hcx - hR * 0.3 + (r() - 0.5) * hR * 2.8, hcy - hR * 0.35 + (r() - 0.6) * hR * 2.4, 0.18); ctx.fill(); } }
+  if (style === 'afro') { ctx.fillStyle = rgba(shade(hair, 0.2), 0.12); const r = rng(5); for (let i = 0; i < 30; i++) { circle(ctx, hcx - hR * 0.3 + (r() - 0.5) * hR * 2.8, hcy - hR * 0.35 + (r() - 0.6) * hR * 2.4, 0.18); ctx.fill(); } }
   // glasses
   if (p.glasses && p.glasses !== 'none') {
     ctx.strokeStyle = '#2a2a30'; ctx.lineWidth = 0.18;
@@ -617,6 +649,7 @@ export function drawAlligator(ctx, x, y, dir, t, o = {}) {
   ctx.fillStyle = shade(c, -0.25);
   for (let i = -14; i < 7; i += 1.1) { const yy = i < -6 ? -1.6 + (i + 14) * -0.02 : -3.2 + Math.abs(i) * 0.03; ctx.beginPath(); ctx.moveTo(i, yy + 0.3); ctx.lineTo(i + 0.45, yy - 0.45); ctx.lineTo(i + 0.9, yy + 0.3); ctx.fill(); }
   ctx.fillStyle = 'rgba(160,160,120,0.15)'; for (let i = 0; i < 30; i++) { circle(ctx, -6 + (i % 10) * 1.4, -2.6 + Math.floor(i / 10) * 0.8, 0.25); ctx.fill(); }
+  if (o.juvenile) { ctx.fillStyle = 'rgba(232,206,92,0.85)'; for (let i = -18; i < 6; i += 2.6) { ctx.beginPath(); ctx.ellipse(i, i < -6 ? -1.0 : -2.2, 0.45, i < -6 ? 0.9 : 1.2, 0, 0, TAU); ctx.fill(); } }
   // legs
   if (!o.submerged) { ctx.fillStyle = shade(c, -0.1); for (const lx of [-4.5, 5]) { ctx.beginPath(); ctx.ellipse(lx, 0.2, 1.4, 0.6, 0.4, 0, TAU); ctx.fill(); } }
   ctx.restore();
@@ -768,5 +801,76 @@ export function drawBarredOwl(ctx, x, y, t) {
   ctx.fillStyle = '#1a1410';
   for (const ex of [-0.9, 0.9]) { if (blink) ctx.fillRect(ex - 0.4, -7.5, 0.8, 0.12); else { circle(ctx, ex, -7.5, 0.4); ctx.fill(); } }
   ctx.fillStyle = '#e0c060'; ctx.beginPath(); ctx.moveTo(-0.2, -7.1); ctx.lineTo(0.2, -7.1); ctx.lineTo(0, -6.5); ctx.fill();
+  ctx.restore();
+}
+
+
+// ------------------------------------------------------------------ more reptiles
+export function drawAnole(ctx, x, y, dir, t, dewlap = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1); ctx.rotate(-1.2);
+  const c = '#5aa04a';
+  ctx.strokeStyle = shade(c, -0.15); ctx.lineWidth = 0.35; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-1.6, 0); ctx.quadraticCurveTo(-4, 0.4 + Math.sin(t * 2) * 0.3, -6.4, 1.4); ctx.stroke();
+  for (const [lx, s] of [[1, 1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(lx, 0.2); ctx.lineTo(lx + 0.5 * s, 1.1); ctx.moveTo(lx, -0.2); ctx.lineTo(lx + 0.5 * s, -1.1); ctx.stroke(); }
+  ctx.fillStyle = lin(ctx, 0, -0.8, 0, 0.8, [[0, shade(c, 0.15)], [1, shade(c, -0.15)]]);
+  ctx.beginPath(); ctx.ellipse(0, 0, 1.9, 0.55, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2.2, 0, 0.95, 0.42, 0, 0, TAU); ctx.fill();
+  if (dewlap > 0) { ctx.fillStyle = '#e8507a'; ctx.beginPath(); ctx.ellipse(1.8, 0.75, 0.55 * dewlap + 0.1, 0.7 * dewlap + 0.1, 0, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = '#1e1612'; circle(ctx, 2.4, -0.18, 0.12); ctx.fill();
+  ctx.restore();
+}
+export function drawSkink(ctx, x, y, dir, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1);
+  ctx.fillStyle = '#3a3026';
+  ctx.beginPath(); ctx.ellipse(0, -0.5, 2.4, 0.5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#4a7ac8'; ctx.beginPath(); ctx.moveTo(-2, -0.5); ctx.quadraticCurveTo(-4.5, -0.4 + Math.sin(t * 3) * 0.2, -6, -0.2); ctx.lineTo(-2, -0.2); ctx.fill();
+  ctx.strokeStyle = '#e8d890'; ctx.lineWidth = 0.1; for (const yy of [-0.75, -0.5, -0.27]) { ctx.beginPath(); ctx.moveTo(-2, yy); ctx.lineTo(2.6, yy); ctx.stroke(); }
+  ctx.fillStyle = '#3a3026'; ctx.beginPath(); ctx.ellipse(2.6, -0.5, 0.8, 0.4, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; circle(ctx, 2.9, -0.65, 0.09); ctx.fill();
+  ctx.restore();
+}
+export function drawWaterSnake(ctx, x, y, dir, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1);
+  const pts = [];
+  for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push([-8 + u * 14, -0.5 - Math.sin(u * Math.PI * 2.2 + t * 0.6) * 1.1 * (1 - u * 0.4)]); }
+  ctx.lineCap = 'round';
+  for (let i = 1; i < pts.length; i++) {
+    const w = 1.1 * Math.min(1, (pts.length - i) / 8, i / 5 + 0.3);
+    ctx.strokeStyle = Math.floor(i / 4) % 2 ? '#5a3e2a' : '#8a6a44'; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(...pts[i - 1]); ctx.lineTo(...pts[i]); ctx.stroke();
+  }
+  const [hx, hy] = pts[pts.length - 1];
+  ctx.fillStyle = '#6a4a32'; ctx.beginPath(); ctx.ellipse(hx + 0.5, hy, 0.95, 0.6, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; circle(ctx, hx + 0.8, hy - 0.2, 0.12); ctx.fill();
+  ctx.restore();
+}
+export function drawSoftshell(ctx, x, y, dir, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1);
+  const f = Math.sin(t * 2) * 0.4;
+  ctx.fillStyle = '#6a6a4a';
+  for (const [fx, s] of [[2.2, 1], [-2, -1]]) { ctx.beginPath(); ctx.ellipse(fx, 1.4 + f * s, 1.4, 0.45, 0.6 * s, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = lin(ctx, 0, -1.5, 0, 1.2, [[0, '#8a845a'], [1, '#5a5a3e']]);
+  ctx.beginPath(); ctx.ellipse(0, 0, 4.2, 1.3, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(40,40,30,0.35)'; for (let i = 0; i < 7; i++) { circle(ctx, -2.6 + i * 0.85, -0.3 + (i % 2) * 0.5, 0.25); ctx.fill(); }
+  ctx.fillStyle = '#7a7650'; ctx.beginPath(); ctx.ellipse(4.6, -0.1, 1.0, 0.45, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(5.4, -0.25); ctx.lineTo(6.6, -0.15); ctx.lineTo(5.4, 0.15); ctx.fill();
+  ctx.fillStyle = '#111'; circle(ctx, 4.9, -0.25, 0.1); ctx.fill();
+  ctx.restore();
+}
+export function drawGopherTortoise(ctx, x, y, dir, t, walking) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1);
+  // burrow apron of pale sand
+  ctx.fillStyle = 'rgba(230,214,170,0.9)'; ctx.beginPath(); ctx.ellipse(-8, 0.1, 6, 1.3, 0, Math.PI, TAU); ctx.fill();
+  ctx.fillStyle = '#3a2e20'; ctx.beginPath(); ctx.ellipse(-8, -0.2, 2.6, 1.4, 0, Math.PI, TAU); ctx.fill();
+  shadowBlob(ctx, 0, 0, 5, 0.3);
+  const k = walking ? Math.sin(t * 5) * 0.4 : 0;
+  ctx.fillStyle = '#6e5e46';
+  for (const lx of [-2.2 + k, 2.2 - k]) { ctx.beginPath(); ctx.roundRect(lx - 0.7, -1.2, 1.4, 1.3, 0.5); ctx.fill(); }
+  ctx.beginPath(); ctx.ellipse(4.2, -1.6, 1.2, 0.85, 0.15, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; circle(ctx, 4.6, -1.85, 0.13); ctx.fill();
+  ctx.fillStyle = lin(ctx, 0, -5, 0, -0.8, [[0, '#9a8a62'], [1, '#5e5038']]);
+  ctx.beginPath(); ctx.ellipse(0, -1.2, 3.8, 3.1, 0, Math.PI, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(60,48,30,0.6)'; ctx.lineWidth = 0.14;
+  for (const [cx, cy] of [[-2.2, -2.4], [0, -3.4], [2.2, -2.4], [-1.1, -1.6], [1.1, -1.6]]) { ctx.beginPath(); ctx.ellipse(cx, cy, 0.9, 0.65, 0, 0, TAU); ctx.stroke(); }
   ctx.restore();
 }

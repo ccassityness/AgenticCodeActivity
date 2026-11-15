@@ -60,6 +60,7 @@ export class Baby {
     this.need = null;
     this.g.ui.needChanged();
     this.happy(msg || pick(['*happy sigh*', 'ahh!', '*beams*', 'goo ♥']));
+    this.g.track('needMet', id);
     return true;
   }
   happy(msg) {
@@ -212,6 +213,7 @@ export class Baby {
   nap() {
     if (this.napping) return;
     this.napping = true; this.napT = rand(30, 45); this.babbleT = 1;
+    this.g.track('nap');
     this.say('z z z…', 2.5);
     if (this.need && this.need.id !== 'lost') this.need = null;
     this.g.ui.needChanged();

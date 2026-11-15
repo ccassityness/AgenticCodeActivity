@@ -1,5 +1,5 @@
 // Character customizer: parent body, face, hair and outfit; baby looks; carrier style.
-import { OPTIONS, drawHuman, drawBabyHead, randomLook, defaultLook } from './figures.js?v=20261115b';
+import { OPTIONS, drawHuman, drawBabyHead, randomLook, defaultLook } from './figures.js?v=20261116a';
 
 const $ = id => document.getElementById(id);
 
@@ -90,6 +90,16 @@ export class Customizer {
     const back = this.look.carrier.type === 'frame';
     drawHuman(c, 0, 0, this.look.parent, { dir: 1, state: 'idle', t: 0, baby: { look: this.look.baby, face: 'content', hatOn: true }, carrier: this.look.carrier, babyPos: back ? 'back' : 'front' });
     c.restore();
+    if (!babyTab) {
+      // close-up of the face
+      const cx = W * 0.8, cy = H * 0.19, R = Math.min(W, H) * 0.17;
+      c.save(); c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2);
+      c.fillStyle = '#f2efe6'; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 3; c.stroke(); c.clip();
+      const k = R / 3.4, Hh = this.look.parent.height || 1;
+      c.translate(cx - 0.6 * k, cy + 28.6 * Hh * k); c.scale(k, k);
+      drawHuman(c, 0, 0, this.look.parent, { dir: 1, state: 'idle', t: 0 });
+      c.restore();
+    }
     if (babyTab) {
       c.save(); c.translate(W * 0.76, H * 0.26); c.scale(sc * 1.7, sc * 1.7);
       drawBabyHead(c, 0, 0, 2.3, 'content', { ...this.look.baby, hatOn: true }, -1);

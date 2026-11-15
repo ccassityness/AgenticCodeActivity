@@ -1,19 +1,21 @@
 // Blue Spring Stroll — boot, game state, rendering loop.
-import { drawBabyHead } from './figures.js?v=20261115b';
-import { snapshot } from './color.js?v=20261115b';
-import { World, groundY, onBoardwalk, zoneAt, WORLD_W, DECK_Y, WATER_Y, drawWater, drawFrontRail, drawMist } from './world.js?v=20261115b';
-import { sky, drawSky, drawLight, drawRays, CYCLE_SECONDS } from './timeofday.js?v=20261115b';
-import * as audio from './audio.js?v=20261115b';
-import { UI, addPhoto, openAlbum } from './ui.js?v=20261115b';
-import { Player } from './player.js?v=20261115b';
-import { Baby } from './baby.js?v=20261115b';
-import { setupInput } from './input.js?v=20261115b';
-import { FX } from './fx.js?v=20261115b';
-import { Customizer, loadLook, saveLook, randomName } from './custom.js?v=20261115b';
+import { drawBabyHead } from './figures.js?v=20261116a';
+import { snapshot } from './color.js?v=20261116a';
+import { World, groundY, onBoardwalk, zoneAt, WORLD_W, DECK_Y, WATER_Y, drawWater, drawFrontRail, drawMist } from './world.js?v=20261116a';
+import { sky, drawSky, drawLight, drawRays, CYCLE_SECONDS } from './timeofday.js?v=20261116a';
+import * as audio from './audio.js?v=20261116a';
+import { UI, addPhoto, openAlbum } from './ui.js?v=20261116a';
+import { Player } from './player.js?v=20261116a';
+import { Baby } from './baby.js?v=20261116a';
+import { setupInput } from './input.js?v=20261116a';
+import { FX } from './fx.js?v=20261116a';
+import { Customizer, loadLook, saveLook, randomName } from './custom.js?v=20261116a';
+import { Progress } from './progress.js?v=20261116a';
+import { plantsFor, Plant } from './flora.js?v=20261116a';
 import {
   Manatee, Gar, FishSchool, Alligator, Turtles, Wader, Anhinga, Osprey, Otter, Armadillo, Owl,
-  Person, Visitor, Sign, Bench, Landmark, Pacifier,
-} from './entities.js?v=20261115b';
+  Person, Visitor, Sign, Bench, Landmark, Pacifier, Anole, Skink, WaterSnake, Softshell, Tortoise,
+} from './entities.js?v=20261116a';
 
 const H = 128, MIN_W = 200, MAX_W = 300, CAM_Y = 10;
 const params = new URLSearchParams(location.search);
@@ -35,6 +37,11 @@ const game = {
   now: 0, started: false, entities: [], zone: null, sky: null, fx: new FX(),
   audio: { ...audio.sfxs, unlock: audio.unlock },
   hasPaci: false,
+  track(type, value, ent) { if (this.progress && this.started) this.progress.track(type, value, ent); },
+  guidePortrait(id) {
+    if (id.startsWith('plant:')) { const p = this.entities.find(e => e instanceof Plant && e.pid === id.slice(6)); return p && p.portrait(); }
+    const e = this.entities.find(x => x.jid === id); return e && e.portrait();
+  },
 
   get onBoardwalk() { return onBoardwalk(this.player.x); },
   toScreen(wx, wy) { const r = this.canvasRect; return { x: r.left + (wx - this.camX) / this.W * r.width, y: r.top + (wy - this.camY) / this.H * r.height }; },
@@ -100,6 +107,7 @@ const game = {
     if (!this.started) return;
     this.audio.unlock(); this.audio.shutter(); this.ui.flash();
     try { addPhoto(canvas.toDataURL('image/jpeg', 0.86)); } catch (err) { console.warn('photo failed', err); }
+    this.track('photo');
     this.ui.toast('Snap! 📸', 'saved to your album');
     if (!this.baby.napping) setTimeout(() => this.baby.say('*cheese!*'), 500);
   },
@@ -133,8 +141,7 @@ function populate() {
   for (const x of [1450, 2150, 2720, 3120]) E.push(new Bench({ x }));
   E.push(new Bench({ x: 3050, occupied: true }));
   E.push(new Landmark({ x: 640, w: 64, h: 60, name: 'Thursby House', react: 'view', text: ['A two-story frame house with wide double porches, built in 1872.', 'From the upstairs porch, the Thursbys could watch steamboats come up the river.'] }));
-  E.push(new Landmark({ x: 1180, y: 60, w: 30, h: 40, name: 'Spanish moss', react: 'thing', text: ['Spanish moss isn\'t a moss at all — it\'s a bromeliad, a relative of the pineapple!', 'It doesn\'t harm the trees. It soaks up water and nutrients straight from the humid air.'] }));
-  E.push(new Landmark({ x: 2440, y: 70, w: 20, h: 50, name: 'Sabal palm', react: 'thing', text: ['The sabal (cabbage) palm is Florida\'s state tree.', 'Its leaves have a curved midrib that makes each fan droop at the tips.'] }));
+  E.push(...plantsFor(game.world));
 
   // wildlife
   const manatees = [];
@@ -143,7 +150,16 @@ function populate() {
   for (let i = 0; i < 2; i++) { const mom = pick(manatees); E.push(new Manatee({ x: mom.x - 8, calf: true, follow: mom })); }
   for (const x of [1100, 1900, 2800]) E.push(new Gar({ x: x + rand(-80, 80) }));
   for (const x of [1350, 2400, 3000]) E.push(new FishSchool({ x: x + rand(-60, 60) }));
-  E.push(new Alligator({ x: 360 }));
+  E.push(new Alligator({ x: 340 }));
+  E.push(new Alligator({ x: 200, swimOnly: true, range: 140, dir: 1 }));
+  E.push(new Alligator({ x: 2560, swimOnly: true, range: 200, dir: -1 }));
+  E.push(new Alligator({ x: 2880, juvenile: true }));
+  E.push(new Softshell({ x: 1650 }));
+  E.push(new WaterSnake({ x: 450, dir: 1 }));
+  E.push(new Anole({ x: 1352, y: DECK_Y - 6 }));
+  E.push(new Anole({ x: 2712, y: DECK_Y - 6, dir: -1 }));
+  E.push(new Skink({ x: 870 }));
+  E.push(new Tortoise({ x: 300 }));
   E.push(new Turtles({ x: 1260 }));
   E.push(new Wader({ x: 1520, y: 97, species: 'heron' }));
   E.push(new Wader({ x: 2330, y: 97, species: 'egret' }));
@@ -205,7 +221,9 @@ function start() {
     game.started = true;
     game.zone = null;
     game.ui.needChanged();
+    game.ui.refreshTasks();
     setTimeout(() => game.baby.say(`*${babyName} kicks happily*`), 1800);
+    setTimeout(() => game.ui.notify('📋 Check today\'s task list — and fill your field guide 📖', 5), 9000);
     setTimeout(() => game.ui.notify('💡 Tap the boardwalk to walk · tap animals and people · tap your baby when they need you', 6), 3000);
   }
   if (game.baby.carrier === 'back' && look.carrier.type === 'wrap') game.baby.carrier = 'front';
@@ -223,7 +241,9 @@ function update(dt) {
     game.player.update(dt);
     game.baby.update(dt);
     const z = zoneAt(game.player.x);
-    if (z && z !== game.zone) { if (game.zone) game.ui.toast(z.name, z.sub); game.zone = z; }
+    if (z && z !== game.zone) { if (game.zone) game.ui.toast(z.name, z.sub); game.zone = z; game.track('zone', z.name); }
+    game.sceneT = (game.sceneT || 0) - dt;
+    if (game.sceneT <= 0) { game.sceneT = 0.5; const x = game.player.x; audio.setScene({ water: onBoardwalk(x) ? 1 : 0.4, boil: Math.exp(-Math.pow((x - 3340) / 220, 2)), river: x < 700 ? 1 : 0 }); }
     for (const e of game.entities) if (e instanceof Pacifier && Math.abs(e.x - game.player.x) < 6) {
       game.entities.splice(game.entities.indexOf(e), 1); game.hasPaci = true; game.audio.pickup?.(); game.fx.sparkles(e.x, e.y - 4, 4);
       game.ui.notify(`Picked up the pacifier — give it back to ${game.baby.name}!`); game.ui.needChanged(); break;
@@ -237,6 +257,7 @@ function update(dt) {
     if (Math.abs(e.x - game.player.x) < 500 || e instanceof Visitor || e instanceof Osprey || e instanceof Manatee) e.update(dt, game);
     if (game.started && e.kind === 'animal' && e.visible(game)) {
       e.noticeT = (e.noticeT ?? rand(0, 10)) - dt;
+      if (Math.abs(e.x - game.player.x) < 60) game.track('see', e.jid, e);
       if (e.noticeT <= 0 && Math.abs(e.x - game.player.x) < 60) { e.noticeT = 50; setTimeout(() => game.baby.react('animal'), 400); }
     }
   }
@@ -263,7 +284,7 @@ function render() {
   const vis = game.entities.filter(e => e.visible(game) && e.x > ox - 60 && e.x < ox + W + 60);
   for (const e of vis) if (e.under) e.draw(wctx, game, ox, oy);
   drawWater(wctx, ox, oy, W, H, game.now, s);
-  const order = { landmark: 0, sign: 1, bench: 1, pickup: 2, animal: 3, person: 4 };
+  const order = { landmark: 0, plant: 0, sign: 1, bench: 1, pickup: 2, animal: 3, person: 4 };
   const above = vis.filter(e => !e.under).sort((a, b) => (order[a.kind] ?? 2) - (order[b.kind] ?? 2));
   for (const e of above) e.draw(wctx, game, ox, oy);
   for (const e of vis) if (e.drawAbove) e.drawAbove(wctx, ox, oy);
@@ -293,6 +314,7 @@ function boot() {
   game.world = new World();
   game.layers = game.world.bakeLayers(MAX_W + 60, Math.min(2, BS * 0.75));
   game.ui = new UI(game);
+  game.progress = new Progress(game);
   game.baby = new Baby(game, babyName);
   game.player = new Player(game, look);
   if (look.carrier.type === 'frame') game.baby.carrier = 'back';
@@ -310,6 +332,8 @@ function boot() {
   $('btnMute').addEventListener('click', () => { audio.unlock(); game.toggleMute(); });
   $('btnAlbum').addEventListener('click', () => openAlbum());
   $('btnLook').addEventListener('click', () => { audio.unlock(); openCustomizer('edit'); });
+  $('btnTasks').addEventListener('click', () => { audio.unlock(); game.ui.openTasks(); });
+  $('btnGuide').addEventListener('click', () => { audio.unlock(); game.ui.openGuide(); });
   openCustomizer('title');
   if (params.has('play')) start();
   requestAnimationFrame(frame);

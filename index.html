@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261115b">
+  <link rel="stylesheet" href="style.css?v=20261116a">
 </head>
 <body>
   <div id="game">
@@ -31,7 +31,10 @@
         <span class="col"><b id="clockTime">7:00 am</b><small id="clockLabel">Morning</small></span>
         <button id="btnMute" aria-label="Toggle sound">🔊</button>
       </div>
+      <button id="taskChip" class="glass" title="Today's tasks">📋 0/5</button>
       <div id="tools" class="glass">
+        <button id="btnTasks" class="tool" title="Today's tasks" aria-label="Today's tasks">📋</button>
+        <button id="btnGuide" class="tool" title="Field guide" aria-label="Field guide">📖</button>
         <button id="btnLook" class="tool" title="Change your look" aria-label="Change your look">👕</button>
         <button id="btnPhoto" class="tool" title="Take photo (P)" aria-label="Take photo">📷</button>
         <button id="btnAlbum" class="tool" title="Photo album" aria-label="Photo album">🖼️</button>
@@ -53,6 +56,21 @@
     </div>
 
     <div id="flash"></div>
+
+    <div id="tasks" class="panel" hidden>
+      <div class="card pcard">
+        <div class="cardHead"><h2>Today's tasks</h2><button class="close" id="tasksClose" aria-label="Close">✕</button></div>
+        <div id="tasksBody"></div>
+      </div>
+    </div>
+
+    <div id="guide" class="panel" hidden>
+      <div class="card pcard guideCard">
+        <div class="cardHead"><h2>Field guide</h2><button class="close" id="guideClose" aria-label="Close">✕</button></div>
+        <div id="guideTabs"><button data-tab="animals">🐊 Animals</button><button data-tab="plants">🌿 Plants</button><button data-tab="badges">🏅 Badges</button></div>
+        <div id="guideBody"></div>
+      </div>
+    </div>
 
     <div id="album" class="panel" hidden>
       <div class="card">
@@ -97,6 +115,6 @@
     <p>Turn your phone sideways for the boardwalk!</p>
   </div>
 
-  <script type="module" src="src/main.js?v=20261115b"></script>
+  <script type="module" src="src/main.js?v=20261116a"></script>
 </body>
 </html>

@@ -16,7 +16,7 @@ export function unlock() {
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  startMusic();
+  startAmbience();
 }
 
 export function setMuted(m) {
@@ -105,40 +105,88 @@ export const sfxs = {
   huff() { if (ctx) noise(ctx.currentTime, 0.25, { freq: 400, vol: 0.15, type: 'lowpass' }); },
 };
 
-// ---------- music: gentle pentatonic arpeggios over I–vi–IV–V ----------
-let night = false;
+// ---------- ambient soundscape of the springs (no music) ----------
+let night = false, scene = { water: 0.6, boil: 0, river: 0 };
 export function setNight(n) { night = n; }
-
-const CHORDS = [
-  [261.63, 329.63, 392.0, 523.25],  // C
-  [220.0, 261.63, 329.63, 440.0],   // Am
-  [174.61, 220.0, 261.63, 349.23],  // F
-  [196.0, 246.94, 293.66, 392.0],   // G
-];
-const PATTERN = [0, 2, 1, 3, 2, 1, 3, 2];
-let nextTime = 0, step = 0, timer = null;
-
-function startMusic() {
-  nextTime = ctx.currentTime + 0.2;
-  timer = setInterval(schedule, 120);
+/** water: 0..1 flowing water level, boil: 0..1 near the spring boil, river: 0..1 near the open river */
+export function setScene(sc) { scene = sc; if (!ctx || !amb) return; const t = ctx.currentTime;
+  amb.water.gain.setTargetAtTime(0.05 + sc.water * 0.07 + sc.boil * 0.09, t, 1.5);
+  amb.boil.gain.setTargetAtTime(sc.boil * 0.12, t, 1.5);
+  amb.lap.gain.setTargetAtTime(sc.river * 0.06, t, 1.5);
+  amb.night.gain.setTargetAtTime(night ? 0.05 : 0, t, 3);
 }
-function schedule() {
-  if (!ctx || ctx.state !== 'running') return;
-  const beat = night ? 0.62 : 0.45;
-  while (nextTime < ctx.currentTime + 0.5) {
-    const bar = Math.floor(step / 8) % CHORDS.length;
-    const chord = CHORDS[bar];
-    const i = step % 8;
-    const oct = night ? 0.5 : 1;
-    if (i === 0) {
-      tone(chord[0] / 2 * oct, nextTime, beat * 7, { dest: music, vol: 0.25, attack: 0.3 });
-      tone(chord[1] * oct, nextTime, beat * 7, { dest: music, vol: 0.06, attack: 0.6, type: 'triangle' });
-    }
-    if (!(night && i % 2 === 1)) {
-      const f = chord[PATTERN[i]] * (night ? 1 : 2) * (i === 7 && Math.random() < 0.3 ? 1.5 : 1);
-      tone(f, nextTime, beat * 2.2, { dest: music, vol: 0.09, type: 'triangle', attack: 0.02 });
-    }
-    nextTime += beat;
-    step++;
-  }
+let amb = null, birdTimer = null;
+function loopNoise(filterType, freq, q) {
+  const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const f = ctx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq; f.Q.value = q;
+  const g = ctx.createGain(); g.gain.value = 0;
+  src.connect(f); f.connect(g); g.connect(ambBus); src.start();
+  return { src, f, g, gain: g.gain };
 }
+let ambBus = null;
+function startAmbience() {
+  ambBus = ctx.createGain(); ambBus.gain.value = 0.9; ambBus.connect(master);
+  const water = loopNoise('lowpass', 520, 0.4);           // the steady murmur of the spring run
+  const boil = loopNoise('bandpass', 260, 0.7);           // deep welling at the boil
+  const lap = loopNoise('bandpass', 900, 1.4);            // little lapping waves on the river
+  const wind = loopNoise('bandpass', 700, 0.5);           // breeze in the palms
+  const nightBed = loopNoise('highpass', 4200, 0.6);      // faint insect hiss at night
+  amb = { water, boil, lap, wind, night: nightBed };
+  for (const k of ['water', 'boil', 'lap', 'night']) amb[k].gain = amb[k].g.gain;
+  setScene(scene);
+  // slow swells for water and wind
+  const swell = () => {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    water.f.frequency.setTargetAtTime(420 + Math.random() * 260, t, 2);
+    lap.f.frequency.setTargetAtTime(700 + Math.random() * 500, t, 0.8);
+    wind.g.gain.setTargetAtTime(Math.random() < 0.35 ? 0.03 + Math.random() * 0.05 : 0.008, t, 2.5);
+    wind.f.frequency.setTargetAtTime(500 + Math.random() * 600, t, 2);
+    setTimeout(swell, 2500 + Math.random() * 3000);
+  };
+  swell();
+  const birds = () => {
+    if (!ctx) return;
+    if (ctx.state === 'running') {
+      if (!night) {
+        const r = Math.random();
+        if (r < 0.26) cardinal(); else if (r < 0.48) carolinaWren(); else if (r < 0.6) hawk(); else if (r < 0.74) fishCrow(); else if (r < 0.84) woodpecker(); else if (r < 0.92) sfxs.splash(); else gnatcatcher();
+      } else {
+        const r = Math.random();
+        if (r < 0.5) chorusFrog(); else if (r < 0.8) crickets(); else pigFrog();
+      }
+    }
+    birdTimer = setTimeout(birds, (night ? 1800 : 2600) + Math.random() * (night ? 2500 : 4500));
+  };
+  birds();
+}
+function pan(v) { const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (p) { p.pan.value = v; p.connect(ambBus); return p; } return ambBus; }
+function call(freq, start, dur, o) { const dest = pan(o.pan ?? (Math.random() * 1.6 - 0.8)); tone(freq, start, dur, { ...o, dest }); }
+function cardinal() { // "cheer-cheer-cheer" then "birdie birdie"
+  const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8, v = 0.035 + Math.random() * 0.025;
+  for (let i = 0; i < 3; i++) call(3300, t + i * 0.32, 0.22, { vol: v, slideTo: 1900, pan: p });
+  for (let i = 0; i < 3; i++) { call(2100, t + 1.05 + i * 0.2, 0.08, { vol: v * 0.8, slideTo: 3000, pan: p }); call(3000, t + 1.13 + i * 0.2, 0.07, { vol: v * 0.7, slideTo: 2400, pan: p }); }
+}
+function carolinaWren() { // "tea-kettle, tea-kettle, tea-kettle"
+  const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8, v = 0.035 + Math.random() * 0.02;
+  for (let i = 0; i < 4; i++) { const s = t + i * 0.36; call(3600, s, 0.07, { vol: v, slideTo: 3200, pan: p }); call(2800, s + 0.1, 0.07, { vol: v, slideTo: 3400, pan: p }); call(3000, s + 0.2, 0.1, { vol: v * 0.9, slideTo: 2500, pan: p }); }
+}
+function hawk() { // red-shouldered hawk "kee-ah, kee-ah"
+  const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8;
+  for (let i = 0; i < 3; i++) { call(2100, t + i * 0.55, 0.32, { type: 'sawtooth', vol: 0.012, slideTo: 1500, pan: p, attack: 0.03 }); call(2050, t + i * 0.55, 0.32, { type: 'triangle', vol: 0.02, slideTo: 1450, pan: p, attack: 0.03 }); }
+}
+function fishCrow() { // nasal "uh-uh"
+  const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8;
+  for (let i = 0; i < 2; i++) call(560, t + i * 0.28, 0.16, { type: 'sawtooth', vol: 0.014, slideTo: 470, pan: p });
+}
+function woodpecker() {
+  const t = ctx.currentTime, d = pan(Math.random() * 1.6 - 0.8);
+  for (let i = 0; i < 14; i++) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1300; f.Q.value = 2; const g = ctx.createGain(); g.gain.setValueAtTime(0.05, t + i * 0.045); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.045 + 0.03); s.connect(f); f.connect(g); g.connect(d); s.start(t + i * 0.045); s.stop(t + i * 0.045 + 0.04); }
+}
+function gnatcatcher() { const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8; for (let i = 0; i < 5; i++) call(4800 + Math.random() * 600, t + i * 0.1, 0.05, { vol: 0.015, pan: p }); }
+function chorusFrog() { // rising "crreeek" like running a finger along a comb
+  const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8;
+  for (let k = 0; k < 3; k++) for (let i = 0; i < 9; i++) call(2200 + i * 70, t + k * 0.7 + i * 0.03, 0.025, { type: 'square', vol: 0.006, pan: p });
+}
+function pigFrog() { const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8; for (let i = 0; i < 3; i++) call(160, t + i * 0.4, 0.18, { type: 'sawtooth', vol: 0.02, slideTo: 120, pan: p }); }
+function crickets() { const t = ctx.currentTime, p = Math.random() * 1.6 - 0.8; for (let k = 0; k < 6; k++) for (let i = 0; i < 3; i++) call(4600, t + k * 0.35 + i * 0.04, 0.025, { vol: 0.008, pan: p }); }

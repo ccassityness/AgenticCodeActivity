@@ -1,5 +1,5 @@
 // Character customizer: parent body, face, hair and outfit; baby looks; carrier style.
-import { OPTIONS, drawHuman, drawBabyHead, randomLook, defaultLook } from './figures.js?v=20261116a';
+import { OPTIONS, drawHuman, drawBabyHead, randomLook, defaultLook } from './figures.js?v=20261117a';
 
 const $ = id => document.getElementById(id);
 

@@ -1,24 +1,25 @@
 // Interactive plants at Blue Spring: smell, touch, water, show the baby, and learn about them.
-import { Entity } from './entities.js?v=20261116a';
-import { groundY, DECK_Y, WATER_Y } from './world.js?v=20261116a';
-import { lin, rad, ellipse, circle, rng, shade, snapshot } from './color.js?v=20261116a';
+import { Entity } from './entities.js?v=20261117a';
+import { groundY, DECK_Y, WATER_Y, clump } from './world.js?v=20261117a';
+import { lin, rad, ellipse, circle, rng, shade, snapshot } from './color.js?v=20261117a';
 
 const pick = a => a[(Math.random() * a.length) | 0];
 
 // ---- painters (each draws with (0,0) at the base of the plant) ----
 function paintOrange(c) {
   const r = rng(4);
+  const G = ['#1e3a1e', '#2c4e26', '#3e6430', '#56803c', '#6e9a48'];
+  // short, forked trunk
   c.fillStyle = lin(c, -1, 0, 1.5, 0, [[0, '#7a6048'], [1, '#4a3828']]);
-  c.beginPath(); c.moveTo(-1, 0); c.lineTo(-0.6, -9); c.lineTo(0.6, -9); c.lineTo(1.1, 0); c.fill();
-  for (let i = 0; i < 9; i++) {
-    const x = (r() - 0.5) * 16, y = -12 - r() * 12, s = 4 + r() * 4;
-    c.fillStyle = rad(c, x - s * 0.3, y - s * 0.3, 0, s, [[0, '#4e7a3a'], [0.6, '#2e5a2a'], [1, '#1e3e1e']]);
-    c.beginPath(); c.ellipse(x, y, s, s * 0.8, 0, 0, Math.PI * 2); c.fill();
-  }
-  for (let i = 0; i < 80; i++) { c.fillStyle = r() < 0.5 ? '#3e6a32' : '#5e8a42'; c.beginPath(); c.ellipse((r() - 0.5) * 22, -10 - r() * 15, 0.7, 0.4, r() * 3, 0, Math.PI * 2); c.fill(); }
-  for (let i = 0; i < 14; i++) {
-    const x = (r() - 0.5) * 18, y = -11 - r() * 12;
-    c.fillStyle = rad(c, x - 0.3, y - 0.3, 0, 1.1, [[0, '#ffc060'], [1, '#e8801a']]); circle(c, x, y, 0.95); c.fill();
+  c.beginPath(); c.moveTo(-1.2, 0); c.quadraticCurveTo(-0.6, -4, -0.5, -8); c.lineTo(0.7, -8); c.quadraticCurveTo(0.6, -4, 1.3, 0); c.fill();
+  c.strokeStyle = '#5a4434'; c.lineWidth = 0.6; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(0, -7.5); c.quadraticCurveTo(-3, -10, -5.5, -13); c.moveTo(0, -7.5); c.quadraticCurveTo(2.5, -11, 4.5, -14); c.stroke();
+  const spots = [[-6, -15, 5.4], [5, -16, 5.6], [0, -20, 6.4], [-3, -12.5, 4], [3.5, -12, 4.2]];
+  for (const [x, y, s] of spots) clump(c, x, y, s, G, r, 0.9);
+  const fruit = [];
+  for (let i = 0; i < 16; i++) { const [x, y, s] = spots[(r() * spots.length) | 0], a = r() * Math.PI * 2, d = 0.4 + r() * 0.55; fruit.push([x + Math.cos(a) * s * d, y + Math.sin(a) * s * 0.6 * d + 0.6]); }
+  for (const [x, y] of fruit) {
+    c.fillStyle = rad(c, x - 0.35, y - 0.35, 0, 1.1, [[0, '#ffc868'], [0.6, '#f0901e'], [1, '#c86a10']]); circle(c, x, y, 0.9); c.fill();
   }
 }
 function paintFernLog(c, green) {
@@ -42,8 +43,8 @@ function paintFernLog(c, green) {
 function paintBeautyberry(c) {
   const r = rng(12);
   for (let i = 0; i < 6; i++) {
-    const a = -Math.PI / 2 + (i - 2.5) * 0.3;
-    const L = 9 + r() * 5;
+    const a = -Math.PI / 2 + (i - 2.5) * 0.28 + (r() - 0.5) * 0.3;
+    const L = 7 + r() * 7;
     const ex = Math.cos(a) * L * 0.8, ey = Math.sin(a) * L;
     c.strokeStyle = '#8a6a4a'; c.lineWidth = 0.3; c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(ex * 0.3, ey * 0.8, ex, ey + 2); c.stroke();
     for (let k = 0; k < 4; k++) {
@@ -83,7 +84,7 @@ function paintWildCoffee(c) {
 function paintIris(c) {
   const r = rng(30);
   for (let i = 0; i < 9; i++) {
-    const x = (i - 4) * 0.7, h = 7 + r() * 5, lean = (r() - 0.5) * 1.6;
+    const x = (i - 4) * 0.6 + (r() - 0.5) * 0.5, h = 6 + r() * 6, lean = (i - 4) * 0.35 + (r() - 0.5) * 1.6;
     c.fillStyle = r() < 0.5 ? '#5e8a6a' : '#6e9a78';
     c.beginPath(); c.moveTo(x - 0.35, 0); c.quadraticCurveTo(x + lean * 0.4, -h * 0.6, x + lean, -h); c.quadraticCurveTo(x + lean * 0.5 + 0.2, -h * 0.6, x + 0.35, 0); c.fill();
   }

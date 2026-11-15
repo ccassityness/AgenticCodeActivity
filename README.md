@@ -1,86 +1,73 @@
 # AgenticCodeActivity
 Repository for Ai in the age of humanities Agentic Code Activity :)
 
-## Hoodoo Hike 🥾👶
+## Blue Spring Stroll 🌿👶
 
-A cozy, mobile-friendly pixel-art game set in **Bryce Canyon National Park**. You play a parent
-carrying their baby on a hike from the rim, down Queen's Garden, through the Navajo Loop's Wall
-Street slot, past Thor's Hammer, and back up to Sunset Point.
+A gentle, mobile-friendly game set at **Blue Spring State Park** in Orange City, Florida. You
+carry your baby along the boardwalk beside the clear spring run, the winter home of hundreds of
+West Indian manatees. Start at the dock on the dark St. Johns River, pass the 1872 Thursby House
+on its ancient shell mound, and follow the boardwalk up to the spring boil, where the water wells
+up from the Floridan Aquifer.
 
-There's no way to fail. Wander, look after your little one, explore hidden corners, make
-friends, play mini-games, and watch the light change from morning to golden hour to a starry
-night (Bryce is an International Dark Sky Park). Everything is painted in code at high resolution:
-shaded hoodoos with real strata, ponderosa pines, haze, sun rays, clouds, rain and rainbows.
+The scenery is painted procedurally in a naturalistic, nature-guide style:
+- live oaks draped in Spanish moss, sabal palms, bald cypress and saw palmetto;
+- turquoise spring water with shifting light on a sandy bottom, and eelgrass;
+- morning mist over the water, golden-hour light, and starry nights.
+
+There's no way to fail. Stroll, care for your baby, and enjoy the wildlife and the people you meet.
+
+### Features
+- **A full character customizer**, with 🎲 *Surprise me* to randomize everything:
+  - **parent:** height, build, skin, eyes, facial hair, glasses, freckles, 10 hairstyles, hats,
+    and top, bottoms, shoes and backpack (with colors);
+  - **baby:** skin, eyes, hair, onesie color and pattern, hat, and pacifier color;
+  - **carrier:** structured, wrap or back frame, in 5 patterns.
+- **A random baby name** on every visit. Keep it, type your own, or roll the 🎲 again.
+- **Baby care.** Thought bubbles show what your baby needs: hungry, diaper, too hot, chilly,
+  sleepy, bored, cuddles, or a pacifier flung onto the boardwalk. Answer with a bottle, a diaper
+  change, a sun hat, a blanket, rocking, songs and play.
+- **Florida wildlife:** manatees (including mothers with calves surfacing to breathe), an
+  alligator, basking turtles, a great blue heron, a great egret, white ibises, an anhinga drying
+  its wings, an osprey, a river otter, an armadillo, gar, leaping mullet, and a barred owl at night.
+- **People:** Ranger Dee (manatees, the spring, local history), a family, a birder, a photographer,
+  Ruth on her bench, and wandering visitors.
+- **Signs** about the St. Johns River, the Thursby House and shell midden, the manatee refuge, and
+  the spring itself.
+- A camera and photo album, a day/night cycle, and gentle synthesized sound.
 
 ### How to play
 | | Phone / tablet (landscape) | Keyboard |
 |---|---|---|
-| Walk | Tap where you want to go | ← → or A / D |
-| Jump | ⤴ button | Space / W / ↑ |
-| Run | Hold 🏃 (uses energy) | Shift |
-| Interact | Tap a person, animal, sign… (walk into items to pick them up) | E |
+| Walk | Tap the boardwalk | ← → or A / D |
+| Interact | Tap an animal, person or sign | E / Space |
 | Baby | Tap your character, the baby panel, or the thought bubble | B |
-| Bag / Journal / Map | 🎒 / 📔 / 🗺️ | I / J / N |
-| Photo | 📷 (or 📸 an animal for the photo mini-game) | P |
-
-### What's in the game
-- **Platforming-lite.** Hop logs, jump onto boulders, and climb ledges. Tap-to-walk auto-hops small
-  obstacles. Running and climbing use energy; rest on benches or eat and drink to recover.
-- **Exploration and secrets.** Three hidden side areas branch off the trail: the *Hidden Seep* (a
-  dripping spring with ferns and a canyon wren), *Two Bridges* (natural rock windows and a climb to a
-  lookout), and the *Moonlit Overlook* (the best stargazing). A trail map tracks what you've found.
-- **A story to uncover.** A gust scattered six pages of an old 1957 hiking diary (fictional) across
-  the canyon, some high on ledges. Find them all and return them to Walt at Sunset Point.
-- **Mini-games**, each rated 1–3 stars:
-  - 📸 wildlife photography (time the focus, frame the shot, catch the animal looking at you);
-  - ✨ stargazing (trace real constellations);
-  - 🎵 lullaby rhythm (sing your baby to sleep);
-  - 📣 canyon-echo memory (in Wall Street);
-  - 🙈 peekaboo timing.
-- **Baby needs.** Thought bubbles show hunger, diaper, heat, cold, sleepiness, boredom, cuddles,
-  teething, "I threw my pacifier!", and fear of thunder. They get louder if ignored, and are
-  answered with bag items, play, or mini-games.
-- **Light stakes.** An afternoon thunderstorm can roll in. Get to shelter (Wall Street, the seep, a
-  cabin) to keep the baby calm, and watch for the rainbow afterward. Energy limits running and
-  jumping.
-- **The bag, friends and the journal.** Pack out litter, return lost items, give gifts, and raise
-  friendship hearts. Ranger Rosa has a pop quiz. The journal tracks 13 animals, 16 badges, the
-  diary story and your mini-game records, and it saves in your browser.
+| Photo / album | 📷 / 🖼️ | P |
+| Change your look | 👕 | |
 
 ### Run locally
-The game is plain HTML + JavaScript modules with no build step:
+Plain HTML + JavaScript modules, no build step:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-then open <http://localhost:8000>. (Opening `index.html` directly from disk won't work because
-browsers block ES modules on `file://` URLs.)
+then open <http://localhost:8000>. Debug URL options: `?play` skips the title screen, `?x=2000`
+starts at a spot along the trail (0–3600), `?t=0.55` sets the time of day (0–1), and `?speed=10`
+speeds up the day.
 
-Debug URL options: `?play` skips the title screen, `?x=2700` starts at a trail position
-(0–4900), `?t=0.75` sets the time of day (0–1, where 0.55 is golden hour and 0.75 is night), and
-`?speed=10` speeds up the day, and `?area=seep|bridges|overlook` starts in a side area.
-
-### Deploying to GitHub Pages
-`.github/workflows/pages.yml` publishes the game on every push to `main`. One-time setup: in
-the repository go to **Settings → Pages → Build and deployment → Source** and choose
-**GitHub Actions**. The game will be live at `https://<user>.github.io/AgenticCodeActivity/`.
+### Deploying
+GitHub Pages publishes the site from `main`.
 
 ### How it's made
 | File | What it does |
 |---|---|
-| `src/figures.js` | Illustrated characters, the baby's expressions, 13 animals and all item icons, drawn with shaded vector shapes |
-| `src/world.js`, `src/areas.js` | Painted terrain, hoodoos, trees, walls and arches baked into cached high-res tiles; the main trail plus three side areas, with obstacles and ledges |
-| `src/timeofday.js` | Sky, sun, moon, stars, Milky Way, clouds, sun rays, rainbow and lighting |
-| `src/player.js`, `src/baby.js` | Movement physics (jump, run, energy); the baby's needs, play and moods |
-| `src/entities.js` | Animals, people (hearts, gifts, lost items), pickups, facilities, portals, signs and landmarks |
-| `src/minigames.js` | The five mini-games |
-| `src/events.js` | The random-event director and the thunderstorm |
-| `src/story.js` | The diary pages |
-| `src/items.js`, `src/journal.js` | The bag, journal, badges and save data |
-| `src/ui.js`, `src/input.js`, `src/fx.js` | Menus, dialogue, bag, journal, map and album; input; hearts and sparkles, rain and dust |
-| `src/audio.js` | Synthesized music and sound effects (WebAudio, no audio files) |
-| `src/main.js` | Boot, title screen, area population, travel, render loop |
+| `src/figures.js` | Naturalistic people (all the customization options), the baby, carriers, and Florida animals, drawn with layered, softly shaded shapes |
+| `src/world.js` | The painted park: trees, moss, the house, boardwalk, river and spring, baked into cached tiles; water, mist and the front railing are drawn every frame |
+| `src/custom.js` | The customizer and baby names |
+| `src/entities.js` | Wildlife, visitors, signs and benches, with their facts and dialogue |
+| `src/baby.js`, `src/player.js` | The baby's needs and care; walking |
+| `src/timeofday.js` | Sky, sun, moon, stars, clouds and lighting |
+| `src/ui.js`, `src/input.js`, `src/fx.js`, `src/audio.js`, `src/main.js` | UI, input, effects, sound, and the game loop |
 
-Facts in the game come from general Bryce Canyon National Park interpretive information. The
-trail is a stylized side-scrolling take on Queen's Garden and the Navajo Loop, not an exact map.
+Facts in the game come from general Blue Spring State Park and Florida wildlife interpretive
+information. The park layout is simplified into a single side-scrolling stroll.

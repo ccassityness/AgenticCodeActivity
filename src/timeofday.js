@@ -7,8 +7,8 @@ export const CYCLE_SECONDS = 600;
 
 const KEYS = [
   { t: 0.00, top: '#5f72ad', bot: '#f2b49e', tint: '#e6d0d8', stars: 0.25, label: 'Dawn' },
-  { t: 0.08, top: '#6aa9dd', bot: '#f6dcc0', tint: '#fff4ea', stars: 0, label: 'Morning' },
-  { t: 0.38, top: '#4d97d8', bot: '#c9e2f2', tint: '#ffffff', stars: 0, label: 'Midday' },
+  { t: 0.08, top: '#8ab8dc', bot: '#f2e6d4', tint: '#fbf3e8', stars: 0, label: 'Morning' },
+  { t: 0.38, top: '#5a9fd6', bot: '#d6e8ee', tint: '#fffdf8', stars: 0, label: 'Midday' },
   { t: 0.52, top: '#7a9fd2', bot: '#ffd195', tint: '#ffdcb4', stars: 0, label: 'Golden hour' },
   { t: 0.61, top: '#525aa0', bot: '#ff8a66', tint: '#efa890', stars: 0.05, label: 'Sunset' },
   { t: 0.68, top: '#252b5e', bot: '#80507f', tint: '#8a80b4', stars: 0.6, label: 'Dusk' },

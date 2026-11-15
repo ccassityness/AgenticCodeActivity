@@ -1,6 +1,6 @@
 // Naturalistic figures drawn with layered, softly shaded shapes (no outlines), in world units.
 // Light comes from the upper left. Figures face right (+x) and are mirrored for left.
-import { shade, mix, rgba, ellipse, circle, lin, rad, canvas, rng } from './color.js?v=20261116a';
+import { shade, mix, rgba, ellipse, circle, lin, rad, canvas, rng } from './color.js?v=20261117a';
 
 const TAU = Math.PI * 2;
 
@@ -326,6 +326,8 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
   if (st === 'feed') { uaA = 0.85; faA = -1.95; }
   if (pose.holding === 'camera' || pose.holding === 'binoculars') { uaA = 1.15; faA = -2.25; uaB = 1.0; faB = -2.2; }
   if (st === 'sit') { uaA = 0.45; faA = -0.7; uaB = 0.35; faB = -0.6; }
+  if (pose.gesture === 'point') { uaA = 1.85; faA = -0.12; }
+  if (pose.gesture === 'wave') { uaA = 2.75; faA = -0.45 + Math.sin(t * 9) * 0.45; }
   const UA = 5.4 * H, FA = 4.9 * H;
   const sleeve = p.top === 'hoodie' ? 1 : p.top === 'button' ? 0.62 : p.top === 'tee' ? 0.48 : 0;
   const arm = (ua, fa, isBack) => {
@@ -441,7 +443,6 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
   // eyes: near eye full, far eye slightly foreshortened
   const eyeY = hcy + hR * 0.02;
   const EYES = [[hcx + hR * 0.12, 1], [hcx + hR * 0.62, 0.78]];
-  const ex = hcx + hR * 0.37, ey = eyeY;
   if (p.glasses !== 'sun') {
     for (const [exx, sx] of EYES) {
       ctx.fillStyle = '#f8f3ee'; ctx.beginPath(); ctx.ellipse(exx, eyeY, hR * 0.15 * sx, hR * 0.095, 0, 0, TAU); ctx.fill();
@@ -500,15 +501,24 @@ export function drawHuman(ctx, x, y, p, pose = {}) {
     if (style === 'bun') { ctx.fillStyle = rad(ctx, hcx - hR * 0.8, hcy - hR * 1.05, 0, hR * 0.6, [[0, shade(hair, 0.15)], [1, shade(hair, -0.12)]]); circle(ctx, hcx - hR * 0.72, hcy - hR * 0.9, hR * 0.52); ctx.fill(); }
   }
   if (style === 'afro') { ctx.fillStyle = rgba(shade(hair, 0.2), 0.12); const r = rng(5); for (let i = 0; i < 30; i++) { circle(ctx, hcx - hR * 0.3 + (r() - 0.5) * hR * 2.8, hcy - hR * 0.35 + (r() - 0.6) * hR * 2.4, 0.18); ctx.fill(); } }
-  // glasses
+  // glasses: a lens over each eye, joined by a bridge, with the arm running back to the ear
   if (p.glasses && p.glasses !== 'none') {
-    ctx.strokeStyle = '#2a2a30'; ctx.lineWidth = 0.18;
-    ctx.fillStyle = p.glasses === 'sun' ? 'rgba(25,30,40,0.88)' : 'rgba(220,235,245,0.18)';
-    ctx.beginPath();
-    if (p.glasses === 'square') ctx.roundRect(ex - hR * 0.26, ey - hR * 0.2, hR * 0.55, hR * 0.38, 0.15);
-    else ctx.ellipse(ex + hR * 0.02, ey, hR * 0.28, hR * 0.22, 0, 0, TAU);
-    ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(ex - hR * 0.26, ey - hR * 0.05); ctx.lineTo(hcx - hR * 0.2, hcy - hR * 0.05); ctx.stroke();
+    const sun = p.glasses === 'sun', sq = p.glasses === 'square';
+    ctx.strokeStyle = sun ? '#1e1e24' : '#2a2a30'; ctx.lineWidth = hR * 0.06; ctx.lineJoin = 'round';
+    ctx.fillStyle = sun ? 'rgba(25,30,40,0.9)' : 'rgba(220,235,245,0.16)';
+    const lens = [];
+    for (const [exx, sx] of EYES) {
+      const lw = hR * (sq ? 0.25 : 0.23) * sx, lh = hR * (sq ? 0.19 : 0.2);
+      lens.push([exx, lw]);
+      ctx.beginPath();
+      if (sq) ctx.roundRect(exx - lw, eyeY - lh, lw * 2, lh * 2, hR * 0.06);
+      else ctx.ellipse(exx, eyeY, lw, lh, 0, 0, TAU);
+      ctx.fill(); ctx.stroke();
+      if (sun) { ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.ellipse(exx - lw * 0.3, eyeY - lh * 0.35, lw * 0.35, lh * 0.2, -0.4, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(25,30,40,0.9)'; }
+    }
+    const [[n1, w1], [n2, w2]] = lens;
+    ctx.beginPath(); ctx.moveTo(n1 + w1, eyeY - hR * 0.04); ctx.quadraticCurveTo((n1 + w1 + n2 - w2) / 2, eyeY - hR * 0.1, n2 - w2, eyeY - hR * 0.04); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(n1 - w1, eyeY - hR * 0.06); ctx.lineTo(hcx - hR * 0.62, hcy + hR * 0.06); ctx.stroke();
   }
   // hats
   const hc = p.hatColor || '#e8dcc0';

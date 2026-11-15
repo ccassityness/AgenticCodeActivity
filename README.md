@@ -9,12 +9,18 @@ West Indian manatees. Start at the dock on the dark St. Johns River, pass the 18
 on its ancient shell mound, and follow the boardwalk up to the spring boil, where the water wells
 up from the Floridan Aquifer.
 
-The scenery is painted procedurally in a naturalistic, nature-guide style:
+The scenery is painted procedurally in a naturalistic, nature-guide style. Trees grow from branching limbs with clumped, sunlit foliage, so no two look alike:
 - live oaks draped in Spanish moss, sabal palms, bald cypress and saw palmetto;
 - turquoise spring water with shifting light on a sandy bottom, and eelgrass;
 - morning mist over the water, golden-hour light, and starry nights.
 
-There's no way to fail. Stroll, care for your baby, and enjoy the wildlife and the people you meet.
+There's no way to fail. Each visit is a short story:
+- **Opening.** A chapter card sets the scene and gives you your goal: walk the boardwalk to the Spring Boil.
+- **Goal bar.** A progress bar at the top tracks how far you've come.
+- **Ending.** At the boil, a manatee surfaces, your baby drifts off to sleep, and an ending card sums up
+  your stroll: animals and plants seen, people met, photos taken, tasks done.
+
+  *Stroll again* starts a fresh visit with the same baby, and *Keep exploring* lets you keep wandering.
 
 ### Features
 - **A full character customizer**, with 🎲 *Surprise me*:
@@ -32,6 +38,23 @@ There's no way to fail. Stroll, care for your baby, and enjoy the wildlife and t
 - **Field guide and badges (📖).** Collect 19 animals and 12 plants with portraits and facts, and
   earn 10 badges (Reptile Ranger, Botanist, Manatee Counter, Super Parent…). Progress saves in
   your browser.
+- **A different stroll every time.**
+  - **The cast moves.** Ranger Dee, the family, the birder, the photographer and Ruth turn up in
+    new places, with a different number of visitors, fish schools, anoles and ibises.
+  - **Unscripted moments.** Each visit picks a different handful:
+    - an osprey plunges for mullet, or a heron spears a fish;
+    - a gator cruises past and the turtles plop off their log one by one;
+    - a mother manatee and her calf surface together;
+    - the Ramírez kid waves at your baby, or strangers stop to swap sightings;
+    - a passer-by admires your baby, or the photographer offers to take your picture.
+- **Lifelike animals.** Creatures accelerate and slow down, linger, and turn gradually:
+  - manatees doze for long spells;
+  - gators drift, then float motionless or sink out of sight;
+  - herons stalk step by step;
+  - skinks and anoles dart and freeze;
+  - otters porpoise along;
+  - mullet move as a loose school;
+  - ospreys circle on thermals.
 - **Baby care.** Thought bubbles show hunger, diaper, heat, cold, sleepiness, boredom, cuddles, or
   a flung pacifier. Answer with a bottle, a change, a hat, a blanket, rocking, songs and play.
 - **Wildlife.**
@@ -87,6 +110,7 @@ sed -i -E "s/v=[0-9a-z]+/v=NEWVERSION/g" index.html src/*.js
 | `src/custom.js` | The customizer and baby names |
 | `src/flora.js` | Interactive plants |
 | `src/progress.js` | Daily tasks, field guide and badges |
+| `src/happenings.js` | The random moments between people and animals |
 | `src/entities.js` | Wildlife, visitors, signs and benches, with their facts and dialogue |
 | `src/baby.js`, `src/player.js` | The baby's needs and care; walking |
 | `src/timeofday.js` | Sky, sun, moon, stars, clouds and lighting |

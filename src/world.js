@@ -2,7 +2,7 @@
 // bald cypress, the boardwalk along the clear spring run, the Thursby House on its shell mound,
 // and the dark St. Johns River. Static scenery is baked into cached high-res tiles; water,
 // mist and light are drawn every frame.
-import { mix, shade, rgba, rng, fbm, canvas, grain, ellipse, circle, lin, rad } from './color.js?v=20261116a';
+import { mix, shade, rgba, rng, fbm, canvas, grain, ellipse, circle, lin, rad } from './color.js?v=20261117a';
 
 export const WORLD_W = 3600;
 export const YTOP = -60;
@@ -65,112 +65,199 @@ function leafMass(g, cx, cy, rx, ry, cols, density, r, haze = 0) {
 function branch(g, x0, y0, x1, y1, w0, w1, col) {
   const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1;
   const nx = -dy / L, ny = dx / L;
-  const mx = (x0 + x1) / 2 + nx * L * 0.08, my = (y0 + y1) / 2 + ny * L * 0.08;
-  g.fillStyle = col;
-  g.beginPath();
-  g.moveTo(x0 + nx * w0 / 2, y0 + ny * w0 / 2);
-  g.quadraticCurveTo(mx + nx * (w0 + w1) / 4, my + ny * (w0 + w1) / 4, x1 + nx * w1 / 2, y1 + ny * w1 / 2);
-  g.lineTo(x1 - nx * w1 / 2, y1 - ny * w1 / 2);
-  g.quadraticCurveTo(mx - nx * (w0 + w1) / 4, my - ny * (w0 + w1) / 4, x0 - nx * w0 / 2, y0 - ny * w0 / 2);
-  g.fill();
+  taper(g, x0, y0, (x0 + x1) / 2 + nx * L * 0.08, (y0 + y1) / 2 + ny * L * 0.08, x1, y1, w0, w1, col);
 }
 
-function spanishMoss(g, x, y, len, r, haze = 0) {
-  const cols = ['#9aa48a', '#b4bca2', '#7e8a70', '#c8ccb8'].map(c => (haze ? mix(c, HAZE, haze) : c));
-  const n = 5 + (r() * 8 | 0);
+/** A tapered, curved limb from (x0,y0) to (x1,y1) bending through the control point. */
+function taper(g, x0, y0, cx, cy, x1, y1, w0, w1, col) {
+  const n = (ax, ay) => { const l = Math.hypot(ax, ay) || 1; return [-ay / l, ax / l]; };
+  const [ax, ay] = n(cx - x0, cy - y0), [bx, by] = n(x1 - cx, y1 - cy);
+  const mx = (ax + bx) / 2, my = (ay + by) / 2, wm = (w0 + w1) / 2;
+  g.fillStyle = col;
+  g.beginPath();
+  g.moveTo(x0 + ax * w0 / 2, y0 + ay * w0 / 2);
+  g.quadraticCurveTo(cx + mx * wm / 2, cy + my * wm / 2, x1 + bx * w1 / 2, y1 + by * w1 / 2);
+  g.arc(x1, y1, w1 / 2, Math.atan2(by, bx), Math.atan2(by, bx) + Math.PI);
+  g.quadraticCurveTo(cx - mx * wm / 2, cy - my * wm / 2, x0 - ax * w0 / 2, y0 - ay * w0 / 2);
+  g.closePath(); g.fill();
+}
+
+/** An irregular, softly lumpy closed shape (a leaf clump outline). */
+export function blob(g, cx, cy, rx, ry, r, jag = 0.22, n = 12) {
+  const ph = r() * 6, f = 2 + (r() * 3 | 0), pts = [];
   for (let i = 0; i < n; i++) {
-    const sx = x + (r() - 0.5) * 2.4, L = len * (0.4 + r() * 0.8);
-    g.strokeStyle = rgba(cols[(r() * 4) | 0], 0.75); g.lineWidth = 0.12 + r() * 0.2;
+    const a = (i + r() * 0.5) / n * Math.PI * 2;
+    const k = 1 + (r() - 0.5) * 2 * jag + Math.sin(a * f + ph) * jag * 0.6;
+    pts.push([cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * k]);
+  }
+  g.beginPath();
+  const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  let m = mid(pts[n - 1], pts[0]); g.moveTo(m[0], m[1]);
+  for (let i = 0; i < n; i++) { const q = pts[i], m2 = mid(q, pts[(i + 1) % n]); g.quadraticCurveTo(q[0], q[1], m2[0], m2[1]); }
+  g.closePath();
+}
+
+/** A painted clump of foliage: shadowed body, lit top-left planes and leafy edges. */
+export function clump(g, cx, cy, s, C, r, detail = 1) {
+  const sq = 0.55 + r() * 0.15;
+  g.fillStyle = C[0]; blob(g, cx, cy + s * 0.06, s, s * sq, r, 0.24); g.fill();
+  g.fillStyle = C[1]; blob(g, cx - s * 0.1, cy - s * 0.08, s * 0.82, s * sq * 0.78, r, 0.28); g.fill();
+  g.fillStyle = C[2]; blob(g, cx - s * 0.22, cy - s * 0.2, s * 0.55, s * sq * 0.5, r, 0.32, 10); g.fill();
+  if (r() < 0.8) { g.fillStyle = C[3]; blob(g, cx - s * 0.32, cy - s * 0.28, s * 0.28, s * sq * 0.26, r, 0.35, 8); g.fill(); }
+  if (!detail) return;
+  // little leaf dabs breaking up the silhouette, lit from the upper left
+  const n = Math.round(s * 5 * detail);
+  for (let i = 0; i < n; i++) {
+    const a = r() * Math.PI * 2, d = 0.75 + r() * 0.35;
+    const x = cx + Math.cos(a) * s * d, y = cy + Math.sin(a) * s * sq * d;
+    const lit = -Math.cos(a) * 0.4 - Math.sin(a) * 0.7;
+    g.fillStyle = C[Math.max(0, Math.min(C.length - 1, Math.round(1.4 + lit * 1.6 + (r() - 0.5))))];
+    const ls = 0.35 + r() * 0.45;
+    g.beginPath(); g.ellipse(x, y, ls * 1.3, ls * 0.6, a + (r() - 0.5), 0, Math.PI * 2); g.fill();
+  }
+}
+
+/** A beard of Spanish moss: a soft, translucent drape that thins into wisps. */
+function spanishMoss(g, x, y, len, r, haze = 0) {
+  const cols = ['#9aa48a', '#b4bca2', '#828e74', '#c4c8b4'].map(c => (haze ? mix(c, HAZE, haze) : c));
+  const w = haze ? 0.5 + r() * 0.8 : 0.8 + r() * 1.6;
+  g.fillStyle = rgba(cols[0], haze ? 0.3 : 0.5);
+  g.beginPath(); g.moveTo(x - w, y);
+  g.quadraticCurveTo(x - w * 0.7, y + len * 0.5, x + (r() - 0.5) * w, y + len * (0.8 + r() * 0.2));
+  g.quadraticCurveTo(x + w * 0.6, y + len * 0.45, x + w, y); g.closePath(); g.fill();
+  if (haze) return;
+  const n = 7 + (r() * 8 | 0);
+  for (let i = 0; i < n; i++) {
+    const sx = x + (r() - 0.5) * w * 1.8, L = len * (0.35 + r() * 0.7);
+    g.strokeStyle = rgba(cols[(r() * 4) | 0], 0.55 + r() * 0.35); g.lineWidth = 0.14 + r() * 0.2;
     g.beginPath(); g.moveTo(sx, y);
-    let px = sx, py = y;
-    for (let k = 1; k <= 6; k++) { const nx = sx + Math.sin(k * 1.3 + i) * 0.6 + (r() - 0.5) * 0.4, ny = y + L * k / 6; g.quadraticCurveTo(px + (r() - 0.5) * 0.8, (py + ny) / 2, nx, ny); px = nx; py = ny; }
+    const sway = (r() - 0.5) * 1.6;
+    g.bezierCurveTo(sx + sway, y + L * 0.3, sx - sway * 0.6, y + L * 0.65, sx + sway * 0.4, y + L);
     g.stroke();
   }
-  g.fillStyle = rgba(cols[0], 0.5); g.beginPath(); g.ellipse(x, y + len * 0.2, 1.1, len * 0.25, 0, 0, Math.PI * 2); g.fill();
 }
+
+const greens = (base, haze) => base.map(c => (haze ? mix(c, HAZE, haze) : c));
 
 function paintOak(g, o) {
   const r = rng(o.seed);
   const hz = c => (o.haze ? mix(c, HAZE, o.haze) : c);
-  const bark = hz('#4a4036'), barkD = hz('#2e2820');
+  const barkL = hz('#6e6254'), bark = hz('#4e443a'), barkD = hz('#302a22');
   const { x, base, h } = o;
-  const tw = h * 0.09;
-  // trunk with flared base
-  g.fillStyle = lin(g, x - tw, 0, x + tw, 0, [[0, hz('#6a5e50')], [0.4, bark], [1, barkD]]);
-  g.beginPath(); g.moveTo(x - tw * 1.6, base); g.quadraticCurveTo(x - tw * 0.8, base - h * 0.08, x - tw * 0.7, base - h * 0.35); g.lineTo(x + tw * 0.7, base - h * 0.35); g.quadraticCurveTo(x + tw * 0.8, base - h * 0.08, x + tw * 1.6, base); g.fill();
-  if (!o.haze) { g.strokeStyle = 'rgba(25,20,15,0.35)'; g.lineWidth = 0.18; for (let i = 0; i < 6; i++) { const bx = x - tw * 0.6 + r() * tw * 1.2; g.beginPath(); g.moveTo(bx, base); g.quadraticCurveTo(bx + (r() - 0.5), base - h * 0.15, bx + (r() - 0.5) * 0.6, base - h * 0.32); g.stroke(); } }
-  // great sprawling limbs
-  const masses = [];
-  const limbs = 3 + (r() * 3 | 0);
-  for (let i = 0; i < limbs; i++) {
-    const side = i % 2 ? 1 : -1;
-    const sx = x + (r() - 0.5) * tw, sy = base - h * (0.3 + r() * 0.08);
-    const len = h * (0.35 + r() * 0.35);
-    const ang = -Math.PI / 2 + side * (0.35 + r() * 0.55);
-    const ex = sx + Math.cos(ang) * len, ey = sy + Math.sin(ang) * len * 0.75;
-    branch(g, sx, sy, ex, ey, tw * 1.1, tw * 0.35, lin(g, sx, sy - 2, sx, sy + 2, [[0, hz('#5e5244')], [1, barkD]]));
-    // sub-branches
-    for (let k = 0; k < 2; k++) {
-      const t = 0.5 + r() * 0.4;
-      const bx = sx + (ex - sx) * t, by = sy + (ey - sy) * t;
-      const a2 = ang + (r() - 0.5) * 1.2 - 0.3;
-      const l2 = len * (0.3 + r() * 0.3);
-      const fx = bx + Math.cos(a2) * l2, fy = by + Math.sin(a2) * l2 * 0.7;
-      branch(g, bx, by, fx, fy, tw * 0.4, tw * 0.15, barkD);
-      masses.push([fx, fy, l2 * 0.75]);
-      if (!o.haze && r() < 0.8) spanishMoss(g, (bx + fx) / 2, (by + fy) / 2 + 0.5, 5 + r() * 9, r);
+  const tw = h * (0.08 + r() * 0.03);
+  const C = greens(r() < 0.5 ? OAK_GREENS : ['#2a3a24', '#384c2c', '#4a5c34', '#5e6c40', '#727e4c'], o.haze);
+  const lean = (r() - 0.5) * 0.25;
+  const forkY = base - h * (0.22 + r() * 0.14), forkX = x + lean * h * 0.3;
+  const limbs = [], tips = [];
+  // grow sprawling limbs recursively, sweeping out and up like a live oak
+  const grow = (x0, y0, ang, len, w, depth) => {
+    const bend = (r() - 0.5) * 0.7 - Math.cos(ang) * 0.12 * Math.sign(Math.cos(ang));
+    const a2 = ang + bend;
+    const cx = x0 + Math.cos(ang) * len * 0.55, cy = y0 + Math.sin(ang) * len * 0.55;
+    const x1 = cx + Math.cos(a2) * len * 0.5, y1 = cy + Math.sin(a2) * len * 0.5;
+    limbs.push([x0, y0, cx, cy, x1, y1, w, w * 0.62, depth]);
+    if (depth >= 3 || len < 5) { tips.push([x1, y1, Math.max(4.5, len * (1.15 + r() * 0.5))]); return; }
+    if (depth >= 1 && r() < 0.6) tips.push([cx, cy - len * 0.1, len * (0.6 + r() * 0.3)]);
+    const kids = 2 + (r() < 0.35 ? 1 : 0);
+    for (let k = 0; k < kids; k++) {
+      const t = k === 0 ? 1 : 0.45 + r() * 0.45;
+      const bx = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1, by = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * cy + t * t * y1;
+      let na = a2 + (k === 0 ? (r() - 0.5) * 0.5 : (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.6));
+      na += (-Math.PI / 2 - na) * 0.18; // a gentle reach toward the light
+      grow(bx, by, na, len * (0.55 + r() * 0.2), w * (k === 0 ? 0.68 : 0.5), depth + 1);
     }
-    for (let k = 0; k < 3; k++) masses.push([ex + (r() - 0.5) * len * 0.6, ey - r() * len * 0.3, len * (0.28 + r() * 0.18)]);
-    // resurrection fern along the top of the limb
-    if (!o.haze) { g.fillStyle = 'rgba(110,140,70,0.75)'; for (let k = 0; k < 10; k++) { const t = r(); g.beginPath(); g.ellipse(sx + (ex - sx) * t, sy + (ey - sy) * t - tw * 0.35, 0.5, 0.22, r(), 0, Math.PI * 2); g.fill(); } }
+  };
+  const n = 3 + (r() * 3 | 0);
+  for (let i = 0; i < n; i++) {
+    const side = (i % 2 ? 1 : -1) * (r() < 0.2 ? -1 : 1);
+    const spread = 0.35 + (i / n) * 0.6 + r() * 0.35;
+    grow(forkX + (r() - 0.5) * tw * 0.6, forkY + r() * h * 0.05, -Math.PI / 2 + side * spread, h * (0.3 + r() * 0.2), tw * (0.85 + r() * 0.3), 0);
   }
-  for (let k = 0; k < 4; k++) masses.push([x + (r() - 0.5) * h * 0.5, base - h * (0.78 + r() * 0.2), h * (0.16 + r() * 0.1)]);
-  for (const [mx, my, s] of masses) leafMass(g, mx, my, s * (0.9 + r() * 0.3), s * (0.5 + r() * 0.25), OAK_GREENS, o.haze ? 1.2 : 3.6, r, o.haze);
-  // moss hanging from the canopy edges
-  if (!o.haze) for (const [mx, my, s] of masses) for (let k = 0; k < 3; k++) spanishMoss(g, mx + (r() - 0.5) * s * 1.4, my + s * 0.35, 6 + r() * 12, r);
-  else for (const [mx, my, s] of masses) spanishMoss(g, mx, my + s * 0.4, 6 + r() * 6, r, o.haze);
+  // back foliage (darker), then wood, then front foliage
+  const Cb = C.map(c => shade(c, -0.18));
+  const order = tips.map(t => [t, r()]).sort((a, b) => a[1] - b[1]);
+  const back = order.slice(0, Math.ceil(order.length * 0.5)), front = order.slice(back.length);
+  for (const [[tx, ty, s]] of back) clump(g, tx + (r() - 0.5) * s * 0.4, ty - s * 0.15, s * 0.85, Cb, r, o.haze ? 0 : 0.6);
+  // trunk with flared, rooty base
+  g.fillStyle = lin(g, x - tw, 0, x + tw, 0, [[0, barkL], [0.45, bark], [1, barkD]]);
+  g.beginPath(); g.moveTo(x - tw * 1.7, base + 1);
+  g.quadraticCurveTo(x - tw * 0.7, base - h * 0.04, x - tw * 0.6 + lean * 2, forkY);
+  g.lineTo(forkX + tw * 0.6, forkY);
+  g.quadraticCurveTo(x + tw * 0.75, base - h * 0.04, x + tw * 1.8, base + 1); g.fill();
+  for (const L of limbs) {
+    const [x0, y0, cx, cy, x1, y1, w0, w1] = L;
+    taper(g, x0, y0, cx, cy, x1, y1, w0, w1, bark);
+    if (!o.haze && w0 > 0.8) taper(g, x0, y0 - w0 * 0.22, cx, cy - w0 * 0.22, x1, y1 - w1 * 0.22, w0 * 0.35, w1 * 0.3, rgba(barkL, 0.7));
+  }
+  if (!o.haze) {
+    // bark furrows, resurrection fern and lichen on the big limbs
+    g.strokeStyle = 'rgba(25,20,15,0.3)'; g.lineWidth = 0.16;
+    for (let i = 0; i < 5; i++) { const bx = x - tw * 0.5 + r() * tw; g.beginPath(); g.moveTo(bx, base); g.quadraticCurveTo(bx + (r() - 0.5) * 1.5, (base + forkY) / 2, bx + (r() - 0.5), forkY + 1); g.stroke(); }
+    for (const L of limbs) if (L[8] <= 1 && r() < 0.7) {
+      const [x0, y0, cx, cy, x1, y1, w0] = L;
+      for (let k = 0; k < 7; k++) { const t = 0.15 + r() * 0.7, px = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1, py = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * cy + t * t * y1 - w0 * 0.4;
+        g.fillStyle = r() < 0.6 ? 'rgba(104,128,66,0.8)' : 'rgba(150,160,130,0.55)'; g.beginPath(); g.ellipse(px, py, 0.45 + r() * 0.35, 0.22, r() - 0.5, 0, Math.PI * 2); g.fill(); }
+    }
+  }
+  for (const [[tx, ty, s]] of front) clump(g, tx, ty - s * 0.1, s * (0.7 + r() * 0.25), C, r, o.haze ? 0 : 1);
+  // Spanish moss in a few long drapes, not on every branch
+  for (const [[tx, ty, s]] of front) if (r() < (o.haze ? 0.3 : 0.4)) spanishMoss(g, tx + (r() - 0.5) * s, ty + s * 0.25, 4 + r() * (o.haze ? 6 : 13), r, o.haze);
+  for (const L of limbs) if (L[8] === 1 && r() < 0.35) { const [, , , , x1, y1] = L; spanishMoss(g, x1, y1 + 0.5, 5 + r() * 10, r, o.haze); }
 }
 
 function paintSabal(g, o) {
   const r = rng(o.seed);
   const hz = c => (o.haze ? mix(c, HAZE, o.haze) : c);
   const { x, base, h } = o;
-  const lean = (r() - 0.5) * 0.18;
+  const lean = (r() - 0.5) * 0.22, bow = (r() - 0.5) * 0.1;
   const topX = x + lean * h, topY = base - h;
-  // trunk with leaf-base "boots" near the top, smooth grey lower down
-  const tw = 1.5 + h * 0.012;
-  g.fillStyle = lin(g, x - tw, 0, x + tw, 0, [[0, hz('#8a8070')], [0.5, hz('#6a6254')], [1, hz('#4a4438')]]);
-  g.beginPath(); g.moveTo(x - tw, base); g.quadraticCurveTo(x + lean * h * 0.5 - tw, base - h * 0.5, topX - tw * 0.9, topY); g.lineTo(topX + tw * 0.9, topY); g.quadraticCurveTo(x + lean * h * 0.5 + tw, base - h * 0.5, x + tw, base); g.fill();
+  const at = t => [x + lean * h * t + Math.sin(t * Math.PI) * bow * h, base - h * t];
+  // trunk: smooth grey below, criss-crossed old leaf bases ("boots") above
+  const tw = 1.3 + h * 0.012;
+  g.fillStyle = lin(g, x - tw, 0, x + tw, 0, [[0, hz('#8e8676')], [0.45, hz('#6e6658')], [1, hz('#4a4438')]]);
+  g.beginPath();
+  for (let i = 0; i <= 12; i++) { const [px, py] = at(i / 12); const w = tw * (1.1 - i / 12 * 0.2); i ? g.lineTo(px - w, py) : g.moveTo(px - w * 1.15, py); }
+  for (let i = 12; i >= 0; i--) { const [px, py] = at(i / 12); const w = tw * (1.1 - i / 12 * 0.2); g.lineTo(px + w * (i ? 1 : 1.15), py); }
+  g.fill();
   if (!o.haze) {
-    g.strokeStyle = 'rgba(40,32,24,0.45)'; g.lineWidth = 0.22;
-    for (let y = 0; y < h * 0.45; y += 1.1) {
-      const t = 1 - y / h, cx = x + lean * h * (1 - t), cy = topY + y;
-      g.beginPath(); g.moveTo(cx - tw, cy); g.lineTo(cx + tw, cy + 1.0); g.moveTo(cx + tw, cy); g.lineTo(cx - tw, cy + 1.0); g.stroke();
+    const bootTo = 0.45 + r() * 0.4; // some palms have shed their boots
+    for (let t = 1; t > 1 - bootTo; t -= 0.012 + r() * 0.02) {
+      const [px, py] = at(t), s = r() < 0.5 ? -1 : 1, w = tw * (0.9 + r() * 0.5);
+      g.fillStyle = hz(['#6e6452', '#625644', '#76695a', '#5a5040'][(r() * 4) | 0]);
+      g.beginPath(); g.moveTo(px + s * w, py - 0.6 - r()); g.lineTo(px - s * w * 0.4, py + 0.3); g.lineTo(px + s * w * 0.9, py + 0.6); g.closePath(); g.fill();
     }
+    g.strokeStyle = 'rgba(40,34,26,0.12)'; g.lineWidth = 0.18;
+    for (let t = 0.05; t < 1 - bootTo; t += 0.02 + r() * 0.05) { const [px, py] = at(t); g.beginPath(); g.moveTo(px - tw, py); g.quadraticCurveTo(px, py + 0.25, px + tw, py - 0.1); g.stroke(); }
   }
-  // dead fronds hanging
-  for (let i = 0; i < 4; i++) {
-    g.strokeStyle = hz(r() < 0.5 ? '#8a7448' : '#a08a58'); g.lineWidth = 0.45;
-    const a = Math.PI / 2 + (r() - 0.5) * 0.8;
-    g.beginPath(); g.moveTo(topX, topY + 1); g.quadraticCurveTo(topX + Math.cos(a) * 4, topY + 4, topX + Math.cos(a) * 3, topY + 8 + r() * 4); g.stroke();
-  }
-  // fan fronds
-  const fronds = 13 + (r() * 6 | 0);
-  for (let i = 0; i < fronds; i++) {
-    const a = -Math.PI * (0.05 + r() * 0.9);
-    const L = 6 + r() * 6 + h * 0.08;
-    const fx = topX + Math.cos(a) * L * 0.55, fy = topY + Math.sin(a) * L * 0.4;
-    g.strokeStyle = hz('#5a6a3a'); g.lineWidth = 0.3;
-    g.beginPath(); g.moveTo(topX, topY); g.quadraticCurveTo((topX + fx) / 2, fy - 1, fx, fy); g.stroke();
-    // costapalmate fan: leaflets radiating from the frond tip and drooping
-    const fan = 11;
+  // fronds: a rounded crown; the lowest are older, drooping and browning
+  const fronds = 12 + (r() * 8 | 0);
+  const list = [];
+  for (let i = 0; i < fronds; i++) list.push(-Math.PI * (-0.12 + r() * 1.24));
+  list.sort((a, b) => Math.sin(a) - Math.sin(b) > 0 ? -1 : 1);
+  for (const a of list) {
+    const droop = Math.max(0, Math.sin(a));
+    const age = droop > 0.2 ? r() * 0.8 : r() * 0.2;
+    const L = (6 + r() * 6 + h * 0.08) * (1 - droop * 0.2);
+    const fx = topX + Math.cos(a) * L * 0.5, fy = topY + Math.sin(a) * L * 0.38 + droop * 2;
+    const cols = PALM_GREENS.map(c => hz(mix(c, '#a8925a', age)));
+    g.strokeStyle = hz(mix('#5a6a3a', '#8a7448', age)); g.lineWidth = 0.32;
+    g.beginPath(); g.moveTo(topX, topY); g.quadraticCurveTo((topX + fx) / 2, Math.min(topY, fy) - 1, fx, fy); g.stroke();
+    const fan = 8 + (r() * 6 | 0), spread = 1.3 + r() * 0.7;
     for (let k = 0; k < fan; k++) {
-      const aa = a + (k / (fan - 1) - 0.5) * 1.7;
-      const ll = L * (0.45 + r() * 0.25);
-      const ex = fx + Math.cos(aa) * ll, ey = fy + Math.sin(aa) * ll * 0.6 + ll * 0.25;
-      g.strokeStyle = hz(PALM_GREENS[(r() * PALM_GREENS.length) | 0]); g.lineWidth = 0.35 + r() * 0.25;
-      g.beginPath(); g.moveTo(fx, fy); g.quadraticCurveTo(fx + Math.cos(aa) * ll * 0.6, fy + Math.sin(aa) * ll * 0.45 - 0.5, ex, ey); g.stroke();
+      const aa = a + (k / (fan - 1) - 0.5) * spread;
+      const ll = L * (0.4 + r() * 0.3);
+      const sag = ll * (0.2 + r() * 0.25 + droop * 0.3);
+      const ex = fx + Math.cos(aa) * ll, ey = fy + Math.sin(aa) * ll * 0.6 + sag;
+      g.strokeStyle = cols[(r() * cols.length) | 0]; g.lineWidth = 0.3 + r() * 0.28;
+      g.beginPath(); g.moveTo(fx, fy); g.quadraticCurveTo(fx + Math.cos(aa) * ll * 0.6, fy + Math.sin(aa) * ll * 0.4 - 0.6, ex, ey); g.stroke();
+      if (!o.haze && r() < 0.35) { g.lineWidth = 0.14; g.beginPath(); g.moveTo(ex, ey); g.lineTo(ex + Math.cos(aa) * 1.2, ey + 1.4); g.stroke(); }
     }
+  }
+  // a few dead fronds hanging against the trunk
+  for (let i = 0; i < 2 + (r() * 4 | 0); i++) {
+    g.strokeStyle = hz(r() < 0.5 ? '#8a7448' : '#a08a58'); g.lineWidth = 0.4 + r() * 0.3;
+    const s = r() < 0.5 ? -1 : 1;
+    g.beginPath(); g.moveTo(topX, topY + 1); g.quadraticCurveTo(topX + s * (2 + r() * 2), topY + 3, topX + s * (1 + r() * 2), topY + 7 + r() * 5); g.stroke();
   }
 }
 
@@ -178,36 +265,59 @@ function paintCypress(g, o) {
   const r = rng(o.seed);
   const hz = c => (o.haze ? mix(c, HAZE, o.haze) : c);
   const { x, base, h } = o;
-  const tw = 1.4 + h * 0.018;
-  g.fillStyle = lin(g, x - tw * 2, 0, x + tw * 2, 0, [[0, hz('#8a6a54')], [0.5, hz('#6a4e3c')], [1, hz('#3e2c22')]]);
-  g.beginPath(); g.moveTo(x - tw * 2.6, base); g.quadraticCurveTo(x - tw * 0.9, base - h * 0.12, x - tw * 0.6, base - h * 0.3); g.lineTo(x - tw * 0.2, base - h); g.lineTo(x + tw * 0.2, base - h); g.lineTo(x + tw * 0.6, base - h * 0.3); g.quadraticCurveTo(x + tw * 0.9, base - h * 0.12, x + tw * 2.6, base); g.fill();
-  if (!o.haze) { g.strokeStyle = 'rgba(40,25,18,0.4)'; g.lineWidth = 0.15; for (let i = 0; i < 8; i++) { const bx = x + (r() - 0.5) * tw; g.beginPath(); g.moveTo(bx, base); g.lineTo(bx + (r() - 0.5) * 0.4, base - h * (0.3 + r() * 0.5)); g.stroke(); } }
-  // feathery foliage sprays
-  for (let i = 0; i < 14; i++) {
-    const ty = 0.35 + r() * 0.65, cy = base - h * ty;
-    const side = r() < 0.5 ? -1 : 1;
-    const len = (1 - ty) * h * 0.25 + 3;
-    const ex = x + side * len, ey = cy - len * 0.2;
-    g.strokeStyle = hz('#5a4434'); g.lineWidth = 0.25; g.beginPath(); g.moveTo(x, cy); g.lineTo(ex, ey); g.stroke();
-    for (let k = 0; k < 18; k++) {
-      const t = r(), px = x + (ex - x) * t, py = cy + (ey - cy) * t;
-      g.strokeStyle = hz(['#5a7a3a', '#6e8e48', '#4a6a30', '#86a058'][(r() * 4) | 0]); g.lineWidth = 0.2;
-      g.beginPath(); g.moveTo(px, py); g.lineTo(px + (r() - 0.5) * 2.4, py + 0.6 + r() * 2); g.stroke();
-    }
+  const tw = 1.2 + h * 0.016;
+  const C = greens(['#3e5a2a', '#4e6e34', '#628240', '#7a984e', '#93ac62'], o.haze);
+  // buttressed, fluted trunk tapering to a crooked top
+  const topX = x + (r() - 0.5) * 4;
+  g.fillStyle = lin(g, x - tw * 2, 0, x + tw * 2, 0, [[0, hz('#9a7c66')], [0.45, hz('#6e5442')], [1, hz('#3e2c22')]]);
+  g.beginPath(); g.moveTo(x - tw * 3, base + 1);
+  g.quadraticCurveTo(x - tw * 0.8, base - h * 0.08, x - tw * 0.6, base - h * 0.3);
+  g.quadraticCurveTo(x - tw * 0.4, base - h * 0.7, topX - 0.3, base - h);
+  g.lineTo(topX + 0.3, base - h);
+  g.quadraticCurveTo(x + tw * 0.45, base - h * 0.7, x + tw * 0.6, base - h * 0.3);
+  g.quadraticCurveTo(x + tw * 0.9, base - h * 0.08, x + tw * 3.2, base + 1); g.fill();
+  if (!o.haze) { g.strokeStyle = 'rgba(40,25,18,0.35)'; g.lineWidth = 0.15; for (let i = 0; i < 7; i++) { const bx = x + (r() - 0.5) * tw * 1.4; g.beginPath(); g.moveTo(bx + (bx - x) * 1.2, base); g.quadraticCurveTo(bx, base - h * 0.15, bx + (r() - 0.5) * 0.3, base - h * (0.3 + r() * 0.4)); g.stroke(); } }
+  // short, nearly horizontal limbs with flat sprays of feathery needles
+  const sprays = [];
+  const nb = 5 + (r() * 5 | 0);
+  for (let i = 0; i < nb; i++) {
+    const ty = 0.45 + r() * 0.55, cy = base - h * ty, cx = x + (topX - x) * ty;
+    const side = r() < 0.5 ? -1 : 1, len = 3 + (1 - ty) * h * 0.18 + r() * 5;
+    const ex = cx + side * len, ey = cy - len * (0.05 + r() * 0.25);
+    branch(g, cx, cy, ex, ey, 0.7, 0.25, hz('#5a4434'));
+    sprays.push([ex, ey, 2.4 + len * 0.35]);
   }
-  if (o.knees && !o.haze) for (let i = 0; i < 4; i++) { const kx = x + (r() - 0.5) * 16, kh = 1.5 + r() * 2.5; g.fillStyle = lin(g, kx - 1, 0, kx + 1, 0, [[0, '#8a6a54'], [1, '#4a3428']]); g.beginPath(); g.moveTo(kx - 1, base + 1); g.quadraticCurveTo(kx, base - kh * 2, kx + 1, base + 1); g.fill(); }
+  sprays.push([topX, base - h - 1, 3 + r() * 2]);
+  for (const [sx, sy, s] of sprays) {
+    clump(g, sx, sy, s, C, r, 0);
+    if (o.haze) continue;
+    for (let k = 0; k < s * 7; k++) {
+      const a = r() * Math.PI * 2, px = sx + Math.cos(a) * s * 0.9, py = sy + Math.sin(a) * s * 0.5;
+      g.strokeStyle = C[1 + ((r() * 4) | 0)]; g.lineWidth = 0.16;
+      g.beginPath(); g.moveTo(px, py); g.lineTo(px + (r() - 0.5) * 1.6, py + 0.5 + r() * 1.4); g.stroke();
+    }
+    if (r() < 0.25) spanishMoss(g, sx, sy + s * 0.3, 4 + r() * 7, r);
+  }
+  if (o.knees && !o.haze) for (let i = 0; i < 2 + (r() * 5 | 0); i++) { const kx = x + (r() - 0.5) * 20, kh = 1.2 + r() * 3; g.fillStyle = lin(g, kx - 1, 0, kx + 1, 0, [[0, '#8a6a54'], [1, '#4a3428']]); g.beginPath(); g.moveTo(kx - 0.9 - r() * 0.4, base + 1); g.quadraticCurveTo(kx + (r() - 0.5), base - kh * 2, kx + 1, base + 1); g.fill(); }
 }
 
 function paintPalmetto(g, o) {
   const r = rng(o.seed);
-  for (let f = 0; f < 4 + (r() * 3 | 0); f++) {
-    const fx = o.x + (r() - 0.5) * o.w, fy = o.base - 2 - r() * o.w * 0.3;
-    g.strokeStyle = '#6a7a42'; g.lineWidth = 0.25; g.beginPath(); g.moveTo(fx, o.base); g.lineTo(fx, fy); g.stroke();
-    for (let k = 0; k < 13; k++) {
-      const a = -Math.PI * (0.05 + k / 12 * 0.9);
-      const L = o.w * (0.35 + r() * 0.15);
-      g.strokeStyle = ['#7a8a4a', '#8e9c58', '#6a7e40', '#a0a868'][(r() * 4) | 0]; g.lineWidth = 0.32;
-      g.beginPath(); g.moveTo(fx, fy); g.lineTo(fx + Math.cos(a) * L, fy + Math.sin(a) * L * 0.7); g.stroke();
+  const tint = r() < 0.3 ? '#8a9a6a' : '#6e7e44';
+  const cols = ['#5e7038', '#7a8a4a', '#8e9c58', '#a2aa6a'].map(c => mix(c, tint, 0.3));
+  const n = 3 + (r() * 4 | 0);
+  for (let f = 0; f < n; f++) {
+    const fx = o.x + (r() - 0.5) * o.w, fy = o.base - 2 - r() * o.w * 0.35;
+    const tilt = (fx - o.x) / o.w * 0.9 + (r() - 0.5) * 0.4;
+    g.strokeStyle = '#6a7a42'; g.lineWidth = 0.25; g.beginPath(); g.moveTo(fx - tilt, o.base); g.quadraticCurveTo(fx - tilt * 0.5, (o.base + fy) / 2, fx, fy); g.stroke();
+    const fan = 10 + (r() * 6 | 0), spread = 0.7 + r() * 0.25;
+    for (let k = 0; k < fan; k++) {
+      const a = -Math.PI / 2 + tilt + (k / (fan - 1) - 0.5) * Math.PI * spread;
+      const L = o.w * (0.3 + r() * 0.18);
+      const ex = fx + Math.cos(a) * L, ey = fy + Math.sin(a) * L * 0.75 + Math.abs(Math.cos(a)) * L * 0.15;
+      const nx = -Math.sin(a) * 0.32, ny = Math.cos(a) * 0.32;
+      g.fillStyle = cols[(r() * 4) | 0];
+      g.beginPath(); g.moveTo(fx, fy); g.quadraticCurveTo((fx + ex) / 2 + nx, (fy + ey) / 2 + ny, ex, ey); g.quadraticCurveTo((fx + ex) / 2 - nx, (fy + ey) / 2 - ny, fx, fy); g.fill();
     }
   }
 }
@@ -280,16 +390,18 @@ function decor() {
   const D = [];
   const r = rng(2024);
   // forest behind the trail
-  for (let x = -20; x < WORLD_W + 40; x += 60 + r() * 90) {
+  for (let x = -20; x < WORLD_W + 40; x += 40 + r() * 130) {
     if (x > 560 && x < 730) continue; // house clearing
-    D.push({ type: 'oak', x, base: groundY(x) + 6, h: 46 + r() * 30, seed: (r() * 1e6) | 0, z: 1 });
+    const young = r() < 0.25;
+    D.push({ type: 'oak', x, base: groundY(x) + 5 + r() * 3, h: young ? 30 + r() * 14 : 44 + r() * 36, seed: (r() * 1e6) | 0, z: 1 });
   }
-  for (let x = 0; x < WORLD_W; x += 30 + r() * 70) {
+  for (let x = 0; x < WORLD_W; x += 20 + r() * 110) {
     if (x > 590 && x < 700) continue;
-    D.push({ type: 'palm', x, base: groundY(x) + 5, h: 42 + r() * 34, seed: (r() * 1e6) | 0, z: r() < 0.5 ? 0 : 2 });
+    const grove = r() < 0.3 ? 1 + (r() * 2 | 0) : 0; // palms often grow in little groups
+    for (let k = 0; k <= grove; k++) D.push({ type: 'palm', x: x + k * (4 + r() * 8), base: groundY(x) + 4 + r() * 3, h: 30 + r() * 48, seed: (r() * 1e6) | 0, z: r() < 0.5 ? 0 : 2 });
   }
   for (let x = 980; x < 3200; x += 140 + r() * 220) D.push({ type: 'cypress', x, base: groundY(x) + 8, h: 70 + r() * 30, seed: (r() * 1e6) | 0, knees: true, z: 0 });
-  for (let x = 0; x < WORLD_W; x += 22 + r() * 30) D.push({ type: 'palmetto', x, base: groundY(x) + 6, w: 8 + r() * 6, seed: (r() * 1e6) | 0, z: 3 });
+  for (let x = 0; x < WORLD_W; x += 10 + r() * 46) D.push({ type: 'palmetto', x, base: groundY(x) + 6 + r() * 2, w: 6 + r() * 9, seed: (r() * 1e6) | 0, z: 3 });
   D.push({ type: 'house', x: 640, base: 84, z: 4 });
   D.push({ type: 'boat', x: 190, base: WATER_Y - 1, z: 5 });
   D.push({ type: 'dock', x0: 90, x1: 300, y: 92, x: 195, w: 210, z: 5 });
@@ -386,8 +498,8 @@ function paintBackRail(g, tx0, tx1) {
   const a = Math.max(tx0 - 2, 900), b = tx1 + 2;
   if (b <= a) return;
   // posts into the water
-  for (let x = Math.ceil(900 / 16) * 16; x < b; x += 16) {
-    if (x < a - 16) continue;
+  for (let x = Math.ceil(900 / 32) * 32; x < b; x += 32) {
+    if (x < a - 32) continue;
     g.fillStyle = lin(g, x, 0, x + 1.8, 0, [[0, '#8a7c6c'], [1, '#4a4038']]); g.fillRect(x, DECK_Y + 1, 1.8, bottomY(x) - DECK_Y);
   }
   // deck fascia
@@ -397,7 +509,7 @@ function paintBackRail(g, tx0, tx1) {
   g.strokeStyle = 'rgba(60,50,40,0.35)'; g.lineWidth = 0.15;
   for (let x = a; x < b; x += 3.1) { g.beginPath(); g.moveTo(x, DECK_Y - 0.4); g.lineTo(x, DECK_Y + 2.5); g.stroke(); }
   // back railing
-  for (let x = Math.ceil(a / 16) * 16 + 8; x < b; x += 16) { g.fillStyle = lin(g, x, 0, x + 1.4, 0, [[0, '#a89a88'], [1, '#6a5e52']]); g.fillRect(x, DECK_Y - 11, 1.4, 11); }
+  for (let x = Math.ceil(a / 32) * 32 + 16; x < b; x += 32) { g.fillStyle = lin(g, x, 0, x + 1.4, 0, [[0, '#a89a88'], [1, '#6a5e52']]); g.fillRect(x, DECK_Y - 11, 1.4, 11); }
   g.fillStyle = '#9a8c7a'; g.fillRect(a, DECK_Y - 11.5, b - a, 1.2); g.fillRect(a, DECK_Y - 6.2, b - a, 0.8);
 }
 
@@ -471,7 +583,7 @@ export class World {
       for (let x = -20; x < w + 20; x += dens * (0.6 + r() * 0.8)) {
         if (kinds === 'far') {
           if (r() < 0.3) paintSabal(g, { x, base: base + 4, h: 26 + r() * 22, seed: (r() * 1e6) | 0, haze });
-          else { const s = 9 + r() * 12; leafMass(g, x, base - s * 0.5, s, s * 0.6, OAK_GREENS, 0.9, r, haze); }
+          else { const s = 7 + r() * 11; clump(g, x, base - s * 0.45, s, greens(OAK_GREENS, haze), r, 0); if (r() < 0.5) clump(g, x + s * (r() - 0.5), base - s * 0.9, s * 0.6, greens(OAK_GREENS, haze), r, 0); }
         } else {
           if (r() < 0.35) paintSabal(g, { x, base: base + 4, h: 32 + r() * 30, seed: (r() * 1e6) | 0, haze });
           else if (r() < 0.2) paintCypress(g, { x, base: base + 4, h: 50 + r() * 26, seed: (r() * 1e6) | 0, haze });
@@ -567,13 +679,13 @@ export function drawFrontRail(ctx, ox, oy, W) {
   const a = Math.max(900, ox - 4), b = ox + W + 4;
   if (b <= a) return;
   const y = DECK_Y - oy;
-  for (let x = Math.ceil(a / 16) * 16; x < b; x += 16) {
-    ctx.fillStyle = lin(ctx, x - ox, 0, x - ox + 1.6, 0, [[0, '#b8aa96'], [1, '#6e6256']]);
-    ctx.fillRect(x - ox, y - 10.5, 1.6, 13);
+  for (let x = Math.ceil(a / 32) * 32; x < b; x += 32) {
+    ctx.fillStyle = lin(ctx, x - ox, 0, x - ox + 1.4, 0, [[0, '#b8aa96'], [1, '#7a6e60']]);
+    ctx.fillRect(x - ox, y - 10.5, 1.4, 13);
   }
-  ctx.fillStyle = lin(ctx, 0, y - 11.2, 0, y - 9.6, [[0, '#c8baa6'], [1, '#7a6e60']]);
-  ctx.fillRect(a - ox, y - 11.2, b - a, 1.6);
-  ctx.fillStyle = '#8a7c6c'; ctx.fillRect(a - ox, y - 5.6, b - a, 0.9);
+  ctx.fillStyle = lin(ctx, 0, y - 11.2, 0, y - 9.8, [[0, '#c8baa6'], [1, '#857868']]);
+  ctx.fillRect(a - ox, y - 11.2, b - a, 1.4);
+  ctx.fillStyle = 'rgba(138,124,108,0.55)'; ctx.fillRect(a - ox, y - 5.6, b - a, 0.6);
   ctx.fillStyle = lin(ctx, 0, y + 0.4, 0, y + 3.2, [[0, '#a89a86'], [1, '#5a4e42']]);
   ctx.fillRect(a - ox, y + 0.4, b - a, 2.8);
 }

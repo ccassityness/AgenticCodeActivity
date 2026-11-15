@@ -1,5 +1,5 @@
 // Daily tasks, the field guide and badges. Progress is saved in the browser.
-import { PLANTS } from './flora.js?v=20261116a';
+import { PLANTS } from './flora.js?v=20261117a';
 
 const KEY = 'bs_progress';
 
@@ -96,10 +96,10 @@ export class Progress {
     if (type === 'see' && value && !s.seen[value]) {
       s.seen[value] = true; changed = true;
       const sp = SPECIES.find(x => x.id === value);
-      if (sp) this.g.ui.notify(`📖 New in your field guide: ${sp.name}`);
+      if (sp) this.g.ui.notify(`📖 Added to field guide · ${sp.name}`, 2.6);
     }
     if (type === 'see' && value === 'manatee' && ent) { this.manateesNow.add(ent); this.track('manateeSeen', ent.uid); s.bestManatees = Math.max(s.bestManatees || 0, this.manateesNow.size); }
-    if (type === 'plant' && !s.plants[value]) { s.plants[value] = true; changed = true; this.g.ui.notify(`📖 New plant in your field guide: ${PLANTS[value].name}`); }
+    if (type === 'plant' && !s.plants[value]) { s.plants[value] = true; changed = true; this.g.ui.notify(`🌿 Added to field guide · ${PLANTS[value].name}`, 2.6); }
     if (type === 'needMet') { s.needsMet = (s.needsMet || 0) + 1; changed = true; }
     if (type === 'photo') { s.photos = (s.photos || 0) + 1; changed = true; }
     // daily tasks

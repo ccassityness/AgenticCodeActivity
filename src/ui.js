@@ -1,6 +1,6 @@
 // DOM UI over the canvas: speech bubbles, the baby's thought bubble, menus, dialogue, toast,
 // notifications, clock and photo album.
-import { NEEDS } from './baby.js?v=20261116a';
+import { NEEDS } from './baby.js?v=20261117a';
 
 const $ = id => document.getElementById(id);
 
@@ -20,7 +20,7 @@ export class UI {
     document.querySelectorAll('#guideTabs button').forEach(b => b.addEventListener('click', () => this.openGuide(b.dataset.tab)));
   }
   get busy() { return !this.menuEl.hidden || !this.dlgEl.hidden || this.panelOpen; }
-  get panelOpen() { return !$('album').hidden || !$('custom').hidden || !$('tasks').hidden || !$('guide').hidden; }
+  get panelOpen() { return ['album', 'custom', 'tasks', 'guide', 'story', 'ending'].some(id => !$(id).hidden); }
 
   openTasks() { this.closeMenu(); this.g.progress.renderTasks($('tasksBody')); $('tasks').hidden = false; }
   openGuide(tab = this.guideTab || 'animals') {
@@ -57,7 +57,27 @@ export class UI {
     if (!p) { b.el.style.display = 'none'; return; }
     const s = this.g.toScreen(p.x, p.y);
     b.el.style.display = '';
-    b.el.style.left = `${s.x}px`; b.el.style.top = `${s.y}px`;
+    b.sx = s.x; b.sy = s.y;
+    b.el.style.left = `${s.x}px`; b.el.style.top = `${s.y - (b.lift || 0)}px`;
+  }
+  /** Nudge overlapping speech bubbles upward so they never cover each other. */
+  unstack() {
+    const live = this.bubbles.filter(b => !b.dead && b.el.style.display !== 'none' && b.sx != null);
+    live.sort((a, b) => b.sy - a.sy);
+    const placed = [];
+    for (const b of live) {
+      const w = b.el.offsetWidth, h = b.el.offsetHeight + 4;
+      let top = b.sy - h;
+      for (let k = 0; k < 6; k++) {
+        const hit = placed.find(p => Math.abs(p.x - b.sx) < (p.w + w) / 2 && top < p.top + p.h && top + h > p.top);
+        if (!hit) break;
+        top = hit.top - h;
+      }
+      const want = b.sy - h - top;
+      b.lift = (b.lift || 0) + (want - (b.lift || 0)) * 0.35;
+      b.el.style.top = `${b.sy - b.lift}px`;
+      placed.push({ x: b.sx, w, top: b.sy - h - b.lift, h });
+    }
   }
   update(dt) {
     let babyTalking = false;
@@ -67,6 +87,7 @@ export class UI {
       if (!b.dead) { this.position(b); if (b.tag === 'baby') babyTalking = true; }
     }
     this.bubbles = this.bubbles.filter(b => !b.dead || b.el.isConnected);
+    this.unstack();
     if (this.thought) {
       const p = this.g.babyPos();
       const s = this.g.toScreen(p.x - this.g.player.dir * 12, p.y - 6);
@@ -109,7 +130,7 @@ export class UI {
     const box = $('notes'), el = document.createElement('div');
     el.className = 'note'; el.textContent = text;
     box.appendChild(el);
-    while (box.children.length > 3) box.firstChild.remove();
+    while (box.children.length > 2) box.firstChild.remove();
     setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 450); }, dur * 1000);
   }
 

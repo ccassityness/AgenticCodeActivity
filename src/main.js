@@ -1,21 +1,22 @@
 // Blue Spring Stroll — boot, game state, rendering loop.
-import { drawBabyHead } from './figures.js?v=20261116a';
-import { snapshot } from './color.js?v=20261116a';
-import { World, groundY, onBoardwalk, zoneAt, WORLD_W, DECK_Y, WATER_Y, drawWater, drawFrontRail, drawMist } from './world.js?v=20261116a';
-import { sky, drawSky, drawLight, drawRays, CYCLE_SECONDS } from './timeofday.js?v=20261116a';
-import * as audio from './audio.js?v=20261116a';
-import { UI, addPhoto, openAlbum } from './ui.js?v=20261116a';
-import { Player } from './player.js?v=20261116a';
-import { Baby } from './baby.js?v=20261116a';
-import { setupInput } from './input.js?v=20261116a';
-import { FX } from './fx.js?v=20261116a';
-import { Customizer, loadLook, saveLook, randomName } from './custom.js?v=20261116a';
-import { Progress } from './progress.js?v=20261116a';
-import { plantsFor, Plant } from './flora.js?v=20261116a';
+import { drawBabyHead } from './figures.js?v=20261117a';
+import { snapshot } from './color.js?v=20261117a';
+import { World, groundY, onBoardwalk, zoneAt, WORLD_W, DECK_Y, WATER_Y, drawWater, drawFrontRail, drawMist } from './world.js?v=20261117a';
+import { sky, drawSky, drawLight, drawRays, CYCLE_SECONDS } from './timeofday.js?v=20261117a';
+import * as audio from './audio.js?v=20261117a';
+import { UI, addPhoto, openAlbum } from './ui.js?v=20261117a';
+import { Player } from './player.js?v=20261117a';
+import { Baby } from './baby.js?v=20261117a';
+import { setupInput } from './input.js?v=20261117a';
+import { FX } from './fx.js?v=20261117a';
+import { Customizer, loadLook, saveLook, randomName } from './custom.js?v=20261117a';
+import { Progress, SPECIES } from './progress.js?v=20261117a';
+import { plantsFor, Plant } from './flora.js?v=20261117a';
+import { Happenings } from './happenings.js?v=20261117a';
 import {
   Manatee, Gar, FishSchool, Alligator, Turtles, Wader, Anhinga, Osprey, Otter, Armadillo, Owl,
   Person, Visitor, Sign, Bench, Landmark, Pacifier, Anole, Skink, WaterSnake, Softshell, Tortoise,
-} from './entities.js?v=20261116a';
+} from './entities.js?v=20261117a';
 
 const H = 128, MIN_W = 200, MAX_W = 300, CAM_Y = 10;
 const params = new URLSearchParams(location.search);
@@ -32,12 +33,22 @@ const BS = Math.max(1.5, Math.min(3, Math.round(window.innerHeight * DPR / H * 2
 
 const game = {
   W: 320, H, S: 3, camX: 0, camY: 0,
-  time: parseFloat(params.get('t') ?? '0.07'),
+  time: parseFloat(params.get('t') ?? String(0.055 + Math.random() * 0.04)),
   timeSpeed: 1, debugSpeed: parseFloat(params.get('speed') ?? '1'),
   now: 0, started: false, entities: [], zone: null, sky: null, fx: new FX(),
   audio: { ...audio.sfxs, unlock: audio.unlock },
   hasPaci: false,
-  track(type, value, ent) { if (this.progress && this.started) this.progress.track(type, value, ent); },
+  session: { seen: new Set(), plants: new Set(), chats: new Set(), photos: 0, moments: 0, t0: 0 },
+  track(type, value, ent) {
+    if (!this.started) return;
+    const S = this.session;
+    if (type === 'see') S.seen.add(value);
+    else if (type === 'plant') S.plants.add(value);
+    else if (type === 'chat' || type === 'topic') S.chats.add(value);
+    else if (type === 'photo') S.photos++;
+    else if (type === 'happening') { S.moments++; return; }
+    if (this.progress) this.progress.track(type, value, ent);
+  },
   guidePortrait(id) {
     if (id.startsWith('plant:')) { const p = this.entities.find(e => e instanceof Plant && e.pid === id.slice(6)); return p && p.portrait(); }
     const e = this.entities.find(x => x.jid === id); return e && e.portrait();
@@ -138,8 +149,11 @@ function populate() {
   S(935, 'Spring Run Boardwalk', ['The boardwalk follows the spring run about a third of a mile, from the river up to the spring itself.', 'Stay on the boardwalk and keep your voice soft — the manatees are resting below.']);
   S(1980, 'Manatee Refuge', ['Blue Spring is a designated manatee refuge. From mid-November to mid-March, the spring run is closed to swimming and boating so the manatees can rest in the warm water.', 'In the 1970s only a few dozen manatees wintered here. Thanks to protection, hundreds now come on the coldest days.'], true);
   S(3195, 'The Spring Boil', ['This is where it all begins: Blue Spring is a "first-magnitude" spring, pouring out roughly 100 million gallons of water a day from the Floridan Aquifer.', 'The water stays near 72–73°F all year — chilly for swimming in summer, but cozy for a manatee in January.'], true);
-  for (const x of [1450, 2150, 2720, 3120]) E.push(new Bench({ x }));
-  E.push(new Bench({ x: 3050, occupied: true }));
+  // every visit, the regulars turn up in different places
+  const benches = [1450, 2150, 2720, 3050, 3120];
+  const ruthX = pick(benches);
+  for (const x of benches) E.push(new Bench({ x, occupied: x === ruthX }));
+  const spots = { ranger: pick([2010, 1180, 2480, 2900]), family: pick([760, 1320, 2230]), heron: pick([1520, 1880, 2400]), photo: pick([2630, 1720, 3150]) };
   E.push(new Landmark({ x: 640, w: 64, h: 60, name: 'Thursby House', react: 'view', text: ['A two-story frame house with wide double porches, built in 1872.', 'From the upstairs porch, the Thursbys could watch steamboats come up the river.'] }));
   E.push(...plantsFor(game.world));
 
@@ -148,31 +162,30 @@ function populate() {
   const nM = 7 + (Math.random() * 6 | 0);
   for (let i = 0; i < nM; i++) { const m = new Manatee({ x: rand(900, 3400) }); manatees.push(m); E.push(m); }
   for (let i = 0; i < 2; i++) { const mom = pick(manatees); E.push(new Manatee({ x: mom.x - 8, calf: true, follow: mom })); }
-  for (const x of [1100, 1900, 2800]) E.push(new Gar({ x: x + rand(-80, 80) }));
-  for (const x of [1350, 2400, 3000]) E.push(new FishSchool({ x: x + rand(-60, 60) }));
-  E.push(new Alligator({ x: 340 }));
-  E.push(new Alligator({ x: 200, swimOnly: true, range: 140, dir: 1 }));
-  E.push(new Alligator({ x: 2560, swimOnly: true, range: 200, dir: -1 }));
+  for (const x of [1100, 1900, 2800]) E.push(new Gar({ x: x + rand(-120, 120) }));
+  for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) E.push(new FishSchool({ x: rand(1100, 3200) }));
+  E.push(new Alligator({ x: pick([340, 300, 380]) }));
+  E.push(new Alligator({ x: rand(150, 260), swimOnly: true, range: 140, dir: pick([1, -1]) }));
+  if (Math.random() < 0.8) E.push(new Alligator({ x: rand(2200, 2900), swimOnly: true, range: 200, dir: pick([1, -1]) }));
   E.push(new Alligator({ x: 2880, juvenile: true }));
-  E.push(new Softshell({ x: 1650 }));
-  E.push(new WaterSnake({ x: 450, dir: 1 }));
-  E.push(new Anole({ x: 1352, y: DECK_Y - 6 }));
-  E.push(new Anole({ x: 2712, y: DECK_Y - 6, dir: -1 }));
-  E.push(new Skink({ x: 870 }));
-  E.push(new Tortoise({ x: 300 }));
+  E.push(new Softshell({ x: rand(1300, 2600) }));
+  E.push(new WaterSnake({ x: rand(380, 520), dir: 1 }));
+  for (const x of [1352, 2712, 1930]) if (Math.random() < 0.75) E.push(new Anole({ x: x + rand(-30, 30), y: DECK_Y - 6, dir: pick([1, -1]) }));
+  E.push(new Skink({ x: rand(840, 890) }));
+  E.push(new Tortoise({ x: rand(270, 330) }));
   E.push(new Turtles({ x: 1260 }));
-  E.push(new Wader({ x: 1520, y: 97, species: 'heron' }));
-  E.push(new Wader({ x: 2330, y: 97, species: 'egret' }));
-  for (const x of [470, 492, 510]) E.push(new Wader({ x: x + rand(-4, 4), species: 'ibis' }));
+  E.push(new Wader({ x: spots.heron, y: 97, species: 'heron' }));
+  E.push(new Wader({ x: pick([2330, 1700, 2950]), y: 97, species: 'egret' }));
+  const ib = pick([480, 820]); for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) E.push(new Wader({ x: ib + i * 18 + rand(-4, 4), species: 'ibis' }));
   E.push(new Anhinga({ x: 1726, y: WATER_Y + 2 - 26.5 }));
-  E.push(new Osprey({ x: 1600 }));
-  E.push(new Otter({ x: 260 }));
-  E.push(new Armadillo({ x: 800 }));
+  E.push(new Osprey({ x: rand(1200, 2400) }));
+  if (Math.random() < 0.8) E.push(new Otter({ x: rand(180, 340) }));
+  E.push(new Armadillo({ x: pick([800, 400, 860]) }));
   E.push(new Owl({ x: 1140, y: 58 }));
 
   // people
   E.push(new Person({
-    x: 2010, name: 'Ranger Dee', greet: 'Good morning! Manatee count is up today!',
+    x: spots.ranger, name: 'Ranger Dee', greet: 'Good morning! Manatee count is up today!',
     look: { height: 1, build: 1, skin: '#a56d47', eyes: '#4a3426', hairStyle: 'ponytail', hair: '#1e1612', facial: 'none', glasses: 'none', top: 'button', topColor: '#b8a878', bottom: 'pants', bottomColor: '#4a5a3a', shoes: 'boots', shoeColor: '#5a3a24', hat: 'ranger', ranger: true },
     lines: ['Each morning we count the manatees from this boardwalk. You can join in — count the gray shapes below!', 'Watch for the little puffs at the surface. Manatees come up to breathe every few minutes.', 'Please keep the run quiet and stay on the boardwalk. They\'re here to rest and stay warm.'],
     topics: [
@@ -181,17 +194,17 @@ function populate() {
       { label: '📜 History here', pages: ['People have lived along this river for thousands of years. The shell mound under the Thursby House is evidence of that long history.', 'In 1972, Jacques Cousteau filmed manatees here, which helped bring the world\'s attention to protecting them.'] },
     ],
   }));
-  const fam = new Person({ x: 760, name: 'The Ramírez family', greet: 'Aww, how old is your little one?', look: { height: 1.03, build: 1.05, skin: '#c48a62', eyes: '#4a3426', hairStyle: 'short', hair: '#1e1612', facial: 'beard', glasses: 'none', top: 'tee', topColor: '#5e8f62', bottom: 'shorts', bottomColor: '#5a6878', shoes: 'sneakers', shoeColor: '#f2f0ea', hat: 'cap', hatColor: '#3e6a96', pack: true, packColor: '#c9584b' },
+  const fam = new Person({ x: spots.family, name: 'The Ramírez family', greet: 'Aww, how old is your little one?', look: { height: 1.03, build: 1.05, skin: '#c48a62', eyes: '#4a3426', hairStyle: 'short', hair: '#1e1612', facial: 'beard', glasses: 'none', top: 'tee', topColor: '#5e8f62', bottom: 'shorts', bottomColor: '#5a6878', shoes: 'sneakers', shoeColor: '#f2f0ea', hat: 'cap', hatColor: '#3e6a96', pack: true, packColor: '#c9584b' },
     lines: ['We\'re looking for the armadillo — my daughter is obsessed!', 'We toured the Thursby House. Imagine steamboats pulling right up to the yard!', 'Our first time seeing manatees. They look like big gentle potatoes.'] });
   fam.kid = { kid: true, height: 1, build: 1, skin: '#c48a62', eyes: '#4a3426', hairStyle: 'braids', hair: '#1e1612', facial: 'none', glasses: 'none', top: 'tee', topColor: '#e8b04a', bottom: 'skirt', bottomColor: '#8a6ab0', shoes: 'sandals', shoeColor: '#c9584b', hat: 'none' };
   E.push(fam);
-  E.push(new Person({ x: 1500, name: 'Birder with binoculars', greet: 'Shh… heron at two o\'clock.', holding: 'binoculars', look: { height: 0.95, build: 0.9, skin: '#f7dcc8', eyes: '#3f6a8a', hairStyle: 'bun', hair: '#d8d4ce', facial: 'none', glasses: 'round', top: 'button', topColor: '#e8dcc0', bottom: 'pants', bottomColor: '#8a7454', shoes: 'boots', shoeColor: '#5a3a24', hat: 'sun', hatColor: '#e8dcc0' },
+  E.push(new Person({ x: spots.heron - 22, name: 'Birder with binoculars', greet: 'Shh… heron at two o\'clock.', holding: 'binoculars', look: { height: 0.95, build: 0.9, skin: '#f7dcc8', eyes: '#3f6a8a', hairStyle: 'bun', hair: '#d8d4ce', facial: 'none', glasses: 'round', top: 'button', topColor: '#e8dcc0', bottom: 'pants', bottomColor: '#8a7454', shoes: 'boots', shoeColor: '#5a3a24', hat: 'sun', hatColor: '#e8dcc0' },
     lines: ['I\'ve logged forty species this week. The anhinga drying its wings is my favorite.', 'Look for the osprey overhead — they dive feet-first for fish!', 'White ibis on the lawn by the old house. Lovely curved bills.'] }));
-  E.push(new Person({ x: 2630, name: 'Photographer', greet: 'The light on the water is perfect right now.', holding: 'camera', look: { height: 1.05, build: 1, skin: '#6a4129', eyes: '#4a3426', hairStyle: 'afro', hair: '#1e1612', facial: 'stubble', glasses: 'none', top: 'hoodie', topColor: '#2f3a44', bottom: 'pants', bottomColor: '#2b2f38', shoes: 'sneakers', shoeColor: '#2b2b30', hat: 'none', pack: true, packColor: '#4a4a50' },
+  E.push(new Person({ x: spots.photo, name: 'Photographer', greet: 'The light on the water is perfect right now.', holding: 'camera', look: { height: 1.05, build: 1, skin: '#6a4129', eyes: '#4a3426', hairStyle: 'afro', hair: '#1e1612', facial: 'stubble', glasses: 'none', top: 'hoodie', topColor: '#2f3a44', bottom: 'pants', bottomColor: '#2b2f38', shoes: 'sneakers', shoeColor: '#2b2b30', hat: 'none', pack: true, packColor: '#4a4a50' },
     lines: ['Tip: polarized sunglasses cut the glare so you can see the manatees underwater.', 'Early mornings in winter, the mist rises off the spring like steam. Magic.', 'Got a great shot of a mother and calf surfacing together.'] }));
-  E.push(new Person({ x: 3050, name: 'Ruth', greet: 'Morning, dear.', seated: true, look: { height: 0.93, build: 1, skin: '#efc6a6', eyes: '#5a7a4a', hairStyle: 'short', hair: '#d8d4ce', facial: 'none', glasses: 'square', top: 'button', topColor: '#d98aa0', bottom: 'pants', bottomColor: '#b8a888', shoes: 'sneakers', shoeColor: '#f2f0ea', hat: 'none', cane: true },
+  E.push(new Person({ x: ruthX, name: 'Ruth', greet: 'Morning, dear.', seated: true, look: { height: 0.93, build: 1, skin: '#efc6a6', eyes: '#5a7a4a', hairStyle: 'short', hair: '#d8d4ce', facial: 'none', glasses: 'square', top: 'button', topColor: '#d98aa0', bottom: 'pants', bottomColor: '#b8a888', shoes: 'sneakers', shoeColor: '#f2f0ea', hat: 'none', cane: true },
     lines: ['I\'ve been coming here every winter since the seventies, when you could count the manatees on two hands.', 'Now look at them all. Makes an old heart happy.', 'Sit a while. The spring has a way of slowing everything down.'] }));
-  for (let i = 0; i < 3; i++) E.push(new Visitor({ x: rand(200, 3300), dir: pick([1, -1]) }));
+  for (let i = 0; i < 3 + (Math.random() * 4 | 0); i++) E.push(new Visitor({ x: rand(200, 3300), dir: pick([1, -1]) }));
   return E;
 }
 
@@ -220,15 +233,80 @@ function start() {
     $('btnMute').textContent = audio.isMuted() ? '🔇' : '🔊';
     game.started = true;
     game.zone = null;
+    game.session.t0 = game.now;
     game.ui.needChanged();
     game.ui.refreshTasks();
-    setTimeout(() => game.baby.say(`*${babyName} kicks happily*`), 1800);
-    setTimeout(() => game.ui.notify('📋 Check today\'s task list — and fill your field guide 📖', 5), 9000);
-    setTimeout(() => game.ui.notify('💡 Tap the boardwalk to walk · tap animals and people · tap your baby when they need you', 6), 3000);
+    if (params.has('play')) begin(); else openStory();
   }
   if (game.baby.carrier === 'back' && look.carrier.type === 'wrap') game.baby.carrier = 'front';
   if (look.carrier.type === 'frame') game.baby.carrier = 'back';
   else if (game.baby.carrier === 'back' && look.carrier.type !== 'structured') game.baby.carrier = 'front';
+}
+
+// ---------- the opening and the ending ----------
+const GOAL_X = 3290, START_X = 120;
+function openStory() {
+  const n = game.baby.name;
+  $('storyTitle').textContent = pick(['A Morning at Blue Spring', `${n} Meets the Manatees`, 'First Visit to the Spring', 'A Walk Along the Spring Run']);
+  $('storyText').textContent = pick([
+    'It\'s a cool winter morning, and mist is still curling off the water.',
+    'The sun is just climbing over the live oaks on a crisp January morning.',
+    'A cold front blew through last night, so the warm spring water is steaming in the chilly air.',
+  ]) + ` You've brought ${n} to Blue Spring State Park for the very first time. Somewhere up the spring run, ${pick(['dozens', 'hundreds', 'a whole herd'])} of manatees are resting in the 72° water.`;
+  $('story').hidden = false;
+}
+function begin() {
+  $('story').hidden = true;
+  game.audio.chime?.();
+  game.ui.toast('Blue Spring State Park', 'Orange City, Florida');
+  setTimeout(() => game.baby.say(`*${game.baby.name} kicks happily*`), 3600);
+  setTimeout(() => game.ui.notify('💡 Tap the path to walk · tap animals, people and plants · tap your baby when they need you', 6), 3500);
+  setTimeout(() => game.ui.notify('📋 Today\'s tasks and your 📖 field guide are in the toolbar', 5), 11000);
+}
+function finale() {
+  game.ended = true;
+  const p = game.player, n = game.baby.name;
+  p.walkTo(GOAL_X + 14, () => { p.dir = 1; });
+  const m = game.entities.filter(e => e instanceof Manatee && !e.follow).sort((a, b) => Math.abs(a.x - 3320) - Math.abs(b.x - 3320))[0];
+  if (m) { m.x = Math.min(m.x, 3420); m.goal = 3315; m.goalV = 4; m.waitT = 0; setTimeout(() => m.surface(game), 3000); }
+  setTimeout(() => game.ui.dialogue('The Spring Boil', [
+    'You\'ve made it to the Spring Boil, the very beginning of Blue Spring.',
+    'Down in the blue, clear water wells up from deep in the Floridan Aquifer — about 100 million gallons every day. It\'s the same water that carried you past the manatees, the gators and the old Thursby House.',
+    `You stand at the rail a while. ${n} watches the water shimmer… and lets out a long, sleepy sigh.`,
+  ], () => {
+    if (!game.baby.napping) game.baby.nap();
+    game.ui.say('parent', () => game.parentHead(), pick(['What a day, little one.', 'Thank you for coming with me.', 'Sweet dreams, ' + n + '.']), { dur: 3 });
+    setTimeout(() => { $('fade').classList.add('on'); }, 2600);
+    setTimeout(showEnding, 4200);
+  }), 2200);
+}
+function showEnding() {
+  const S = game.session, n = game.baby.name;
+  const mins = Math.max(1, Math.round((game.now - S.t0) / 60));
+  const species = SPECIES.filter(sp => S.seen.has(sp.id));
+  $('endTitle').textContent = `${n}'s first stroll at Blue Spring`;
+  $('endText').textContent = pick([
+    `${n} fell asleep to the hush of the spring, and you carried them home with a camera roll full of memories.`,
+    `The two of you watched the manatees breathe, the herons fish and the sun climb over the oaks. ${n} will sleep well tonight.`,
+    `A slow, lovely morning by the water. ${n} dozed off before you even reached the car.`,
+  ]);
+  const tile = (v, l) => `<div><b>${v}</b><small>${l}</small></div>`;
+  $('endStats').innerHTML = tile(mins + 'm', 'strolling') + tile(species.length, 'animals') + tile(S.plants.size, 'plants') + tile(S.chats.size, 'people met') + tile(S.photos, 'photos') + tile(`${game.progress.doneCount}/${game.progress.tasks.length}`, 'tasks');
+  $('endSeen').textContent = species.length ? 'You saw: ' + species.map(sp => sp.name).join(' · ') : '';
+  $('notes').innerHTML = '';
+  $('ending').hidden = false;
+  $('fade').classList.remove('on');
+  game.audio.fanfare?.();
+}
+function strollAgain() {
+  try { sessionStorage.setItem('bs_again', game.baby.name); } catch { /* private mode */ }
+  $('fade').classList.add('on');
+  setTimeout(() => location.reload(), 900);
+}
+function keepExploring() {
+  $('ending').hidden = true;
+  $('goalText').textContent = '✨ Stroll complete — explore as long as you like';
+  $('goalBar').style.width = '100%';
 }
 
 // ---------- loop ----------
@@ -252,6 +330,12 @@ function update(dt) {
     const face = game.baby.face;
     if (face !== game._lastFace) { game._lastFace = face; game.ui.refreshBaby(); }
     game.world.prewarm(game.player.x + game.player.dir * 200, BS);
+    game.happen.update(dt);
+    if (!game.ended) {
+      $('goalBar').style.width = `${Math.max(0, Math.min(1, (game.player.x - START_X) / (GOAL_X - START_X))) * 100}%`;
+      if (game.player.x >= GOAL_X && !game.ui.dlg) finale();
+      if (!game.nudged && game.time > 0.76 && game.time < 0.8) { game.nudged = true; game.ui.notify('🌙 The light is fading — head up to the Spring Boil to finish your stroll', 6); }
+    }
   }
   for (const e of game.entities) {
     if (Math.abs(e.x - game.player.x) < 500 || e instanceof Visitor || e instanceof Osprey || e instanceof Manatee) e.update(dt, game);
@@ -315,6 +399,7 @@ function boot() {
   game.layers = game.world.bakeLayers(MAX_W + 60, Math.min(2, BS * 0.75));
   game.ui = new UI(game);
   game.progress = new Progress(game);
+  game.happen = new Happenings(game);
   game.baby = new Baby(game, babyName);
   game.player = new Player(game, look);
   if (look.carrier.type === 'frame') game.baby.carrier = 'back';
@@ -327,6 +412,10 @@ function boot() {
   setupInput(game, canvas);
   customizer = new Customizer(look, babyName, () => { game._bp = null; });
   $('custGo').addEventListener('click', start);
+  $('storyGo').addEventListener('click', () => { audio.unlock(); begin(); });
+  $('endAgain').addEventListener('click', strollAgain);
+  $('endStay').addEventListener('click', keepExploring);
+  for (const id of ['story', 'ending']) $(id).addEventListener('pointerdown', e => e.stopPropagation());
   $('babyPanel').addEventListener('click', () => { audio.unlock(); game.openBabyMenu(); });
   $('btnPhoto').addEventListener('click', () => game.takePhoto());
   $('btnMute').addEventListener('click', () => { audio.unlock(); game.toggleMute(); });
@@ -334,8 +423,10 @@ function boot() {
   $('btnLook').addEventListener('click', () => { audio.unlock(); openCustomizer('edit'); });
   $('btnTasks').addEventListener('click', () => { audio.unlock(); game.ui.openTasks(); });
   $('btnGuide').addEventListener('click', () => { audio.unlock(); game.ui.openGuide(); });
-  openCustomizer('title');
-  if (params.has('play')) start();
+  let again = null;
+  try { again = sessionStorage.getItem('bs_again'); sessionStorage.removeItem('bs_again'); } catch { /* ignore */ }
+  if (again) { $('babyName').value = again; start(); }
+  else { openCustomizer('title'); if (params.has('play')) start(); }
   requestAnimationFrame(frame);
 }
 boot();

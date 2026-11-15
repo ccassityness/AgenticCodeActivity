@@ -1,7 +1,7 @@
 // Day cycle: morning -> midday -> golden hour -> sunset -> starry night -> dawn, plus clouds,
 // sun rays, rainbow and storm darkening. All drawing is in world units (resolution independent).
-import { hexToRgb } from './color.js?v=20261116a';
-import { rng, canvas } from './color.js?v=20261116a';
+import { hexToRgb } from './color.js?v=20261117a';
+import { rng, canvas } from './color.js?v=20261117a';
 
 export const CYCLE_SECONDS = 600;
 

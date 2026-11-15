@@ -39,7 +39,7 @@ function tone(freq, start, dur, { type = 'sine', vol = 0.3, attack = 0.01, dest 
 }
 function noise(start, dur, { freq = 800, q = 1, vol = 0.2, type = 'bandpass' } = {}) {
   if (!ctx) return;
-  const s = ctx.createBufferSource(); s.buffer = noiseBuf;
+  const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
   const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
   const g = ctx.createGain();
   g.gain.setValueAtTime(vol, start);
@@ -86,6 +86,13 @@ export const sfxs = {
     [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.1, 0.35, { type: 'triangle', vol: 0.14 }));
   },
   pickup() { if (!ctx) return; const t = ctx.currentTime; tone(880, t, 0.08, { type: 'square', vol: 0.05 }); tone(1320, t + 0.07, 0.12, { type: 'square', vol: 0.05 }); },
+  jump() { if (ctx) tone(320, ctx.currentTime, 0.14, { type: 'triangle', vol: 0.08, slideTo: 620 }); },
+  land() { if (ctx) noise(ctx.currentTime, 0.1, { freq: 300, vol: 0.18, type: 'lowpass' }); },
+  wren() { if (!ctx) return; const t = ctx.currentTime; for (let i = 0; i < 9; i++) tone(3200 - i * 170, t + i * 0.09, 0.08, { vol: 0.06, slideTo: 3000 - i * 170 }); },
+  thunder() { if (!ctx) return; const t = ctx.currentTime; noise(t, 1.8, { freq: 120, q: 0.4, vol: 0.5, type: 'lowpass' }); noise(t + 0.2, 1.4, { freq: 80, q: 0.4, vol: 0.4, type: 'lowpass' }); },
+  note(f, d = 0.4, type = 'triangle') { if (ctx) tone(f, ctx.currentTime, d, { type, vol: 0.18, attack: 0.01 }); },
+  miss() { if (ctx) tone(180, ctx.currentTime, 0.18, { type: 'sawtooth', vol: 0.05, slideTo: 140 }); },
+  star() { if (!ctx) return; const t = ctx.currentTime; tone(1320, t, 0.25, { vol: 0.12 }); tone(1760, t + 0.08, 0.3, { vol: 0.1 }); },
   huff() { if (ctx) noise(ctx.currentTime, 0.25, { freq: 400, vol: 0.15, type: 'lowpass' }); },
 };
 

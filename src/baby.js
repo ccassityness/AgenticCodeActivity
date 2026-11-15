@@ -24,6 +24,7 @@ export const NEEDS = {
   cuddle: { icon: '🤗', label: 'Wants cuddles', hint: 'Rock & cuddle' },
   teething: { icon: '🦷', label: 'Teething', hint: 'Give the cool teether' },
   lost: { icon: '🥺', label: 'Wants their thing back', hint: 'Pick it up and give it back' },
+  scared: { icon: '😨', label: 'Scared of the thunder', hint: 'Cuddle them, or get to shelter' },
 };
 
 export class Baby {
@@ -113,7 +114,7 @@ export class Baby {
     }
 
     // timers tick toward new needs
-    const shade = g.zone && g.zone.name === 'Wall Street';
+    const shade = g.events.sheltered();
     const hotOK = !g.sky.night && g.time > 0.18 && g.time < 0.58 && !shade && !this.wearing.hat;
     const coldOK = (g.sky.night || g.sky.dusk) && !this.wearing.blanket;
     for (const k of Object.keys(this.timers)) {
@@ -177,6 +178,7 @@ export class Baby {
       cuddle: [['*arms up*', 'up?', 'mm…'], ['*reaches for you*', 'nnnh!']],
       teething: [['*drools*', '*gnaws on strap*'], ['*sore gums*', 'owie…']],
       lost: [['*points back*', 'da! da!', 'uh-oh!'], ['*reaches back*', 'nnh! DA!']],
+      scared: [['*flinches*', '*hides face*', 'eep!'], ['*clings to you*', '*trembles*']],
     };
     return (L[id] || L.bored)[Math.min(1, lvl - 1)];
   }
@@ -241,7 +243,7 @@ export class Baby {
   play(kind) {
     const g = this.g;
     if (this.napping) { this.say('*snores softly*'); return; }
-    if (this.need && ['hungry', 'diaper', 'teething', 'lost', 'hot', 'cold'].includes(this.need.id)) {
+    if (this.need && ['hungry', 'diaper', 'teething', 'lost', 'hot', 'cold', 'scared'].includes(this.need.id)) {
       this.say(pick(['*not now*', 'nnh…', '*fusses*']));
       return;
     }
@@ -268,6 +270,7 @@ export class Baby {
     g.ui.say('parent', () => g.parentHead(), pick(['shh, shh…', 'there, there…', 'I\'ve got you.']), { dur: 2 });
     setTimeout(() => {
       if (this.need?.id === 'cuddle') this.meetNeed('cuddle', '*melts into you*');
+      else if (this.need?.id === 'scared') this.meetNeed('scared', '*calms down in your arms*');
       else if (this.need?.id === 'sleepy') { this.meetNeed('sleepy', '*eyes droop…*'); this.nap(); }
       else if (this.need) this.say(pick(this.needLines(this.need.id, 1)));
       else if (g.sky.night && Math.random() < 0.6) this.nap();
@@ -339,7 +342,8 @@ export class Baby {
       diaper: () => (g.bag.has('diaper') ? { label: '🧷 Change diaper', run: () => this.useItem('diaper') } : { label: '🧷 Out of diapers — find a restroom', run: () => g.ui.notify('The restrooms at the trailheads have diapers.') }),
       hot: () => (this.wearing.hat ? null : g.bag.has('sunhat') ? { label: '👒 Put on sun hat', run: () => this.useItem('sunhat') } : { label: '👒 Find shade (or the hat!)', run: () => g.ui.notify('Wall Street is nice and shady.') }),
       cold: () => (g.bag.has('blanket') ? { label: '🧣 Wrap in blanket', run: () => this.useItem('blanket') } : null),
-      sleepy: () => ({ label: '🤱 Rock to sleep', run: () => this.rock() }),
+      sleepy: () => ({ label: '🎵 Sing a lullaby', run: () => g.minigames.lullaby() }),
+      scared: () => ({ label: '🤗 Cuddle close', run: () => this.rock() }),
       bored: () => ({ label: '🙈 Peekaboo!', run: () => this.play('peekaboo') }),
       cuddle: () => ({ label: '🤗 Cuddle & rock', run: () => this.rock() }),
       teething: () => (g.bag.has('teether') ? { label: '🦷 Give teether', run: () => this.useItem('teether') } : null),
@@ -370,11 +374,13 @@ export class Baby {
   }
   playMenu() {
     const acts = [
-      { label: '🙈 Peekaboo', run: () => this.play('peekaboo') },
+      { label: '🙈 Peekaboo game', primary: true, run: () => this.g.minigames.peekaboo() },
+      { label: '🙈 Quick peekaboo', run: () => this.play('peekaboo') },
       { label: '🤭 Tickle', run: () => this.play('tickle') },
       { label: '😛 Raspberry', run: () => this.play('raspberry') },
       { label: '🦘 Bounce', run: () => this.play('bounce') },
-      { label: '🎵 Sing', run: () => this.sing() },
+      { label: '🎵 Sing a lullaby', run: () => this.g.minigames.lullaby() },
+      { label: '🎶 Hum a tune', run: () => this.sing() },
     ];
     for (const id of ['rattle', 'carving']) if (this.g.bag.has(id)) acts.push({ label: `🧸 ${ITEMS[id].name}`, run: () => this.useItem(id) });
     return acts;

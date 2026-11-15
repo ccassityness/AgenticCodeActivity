@@ -1,434 +1,529 @@
-// The trail: ground profile, place names, and procedurally drawn pixel-art
-// terrain baked into parallax layers at load time.
-import { mix, shade, hexToRgb } from './sprites.js';
+// Painted, high-resolution world. Each Area (the main trail plus hidden side areas) has a
+// ground profile, obstacles/ledges for platforming, and decor painted into cached tiles.
+import { mix, shade, rgba, rng, fbm, noise1, canvas, grain, ellipse, circle, lin, rad } from './color.js';
 
-export const WORLD_W = 4900;
-export const YTOP = -170;   // world y of the top of the near layer
-export const YBOT = 380;    // world y of the bottom of the near layer
+export const YTOP = -170;
+export const YBOT = 380;
+const TILE_W = 256;
 
-// Trail profile (x, ground y). Rim -> Queen's Garden -> Navajo Loop -> back up to the rim.
-const PTS = [
-  [0, 100], [760, 102], [820, 112], [880, 126], [940, 136], [1000, 150], [1060, 164], [1120, 174],
-  [1180, 188], [1240, 196], [1300, 208], [1380, 218], [1500, 226], [1700, 223], [1900, 228],
-  [2100, 225], [2300, 229], [2500, 226], [2700, 230], [2950, 228], [3050, 222], [3120, 208],
-  [3200, 196], [3280, 182], [3360, 172], [3440, 156], [3520, 142], [3600, 126], [3680, 112],
-  [3760, 102], [WORLD_W, 100],
-];
+// Claron Formation palette — peachy pinks, oranges, creams and a few deep reds.
+const STRATA = ['#ecb495', '#e09a76', '#d47a50', '#f0d2b4', '#c6643f', '#e8ab8c', '#f4e3cc', '#d98d66', '#cf7656', '#e9c0a0'];
+const CAP = '#f2e6d6';
+// hoodoo bands: mostly close warm tones, an occasional pale limestone layer
+const HBANDS = ['#e3a07c', '#dc9070', '#e6a888', '#d8865f', '#d27e58', '#e9b08f', '#ecc7aa', '#dd946e', '#cf7a55', '#e4a482', '#d98a64', '#f0d8c2'];
+const SHADOW = '#6e4058';   // cool violet shadow multiplied into rock
+const HAZE = '#b7c0db';
 
-export function groundY(x) {
-  if (x <= PTS[0][0]) return PTS[0][1];
-  for (let i = 1; i < PTS.length; i++) {
-    const [x1, y1] = PTS[i];
-    if (x <= x1) {
-      const [x0, y0] = PTS[i - 1];
-      const t = (x - x0) / (x1 - x0);
-      const s = (1 - Math.cos(t * Math.PI)) / 2;
-      return y0 + (y1 - y0) * s;
-    }
+// ------------------------------------------------------------------ painting primitives
+function hoodooEdges(o) {
+  const r = rng(o.seed);
+  const k = 2.2 + r() * 3, ph = r() * 6.28;
+  const capFrac = o.capFrac ?? (0.08 + r() * 0.07);
+  const n = Math.max(8, Math.ceil(o.h / 1.4));
+  const L = [], R = [];
+  for (let i = 0; i <= n; i++) {
+    const ty = i / n;
+    let half;
+    if (ty > 1 - capFrac) {
+      const cy = (ty - (1 - capFrac)) / capFrac;
+      half = o.w * (o.capW ?? 0.42) * Math.sqrt(Math.max(0.03, 1 - cy * cy * 0.92));
+    } else if (ty > 1 - capFrac - 0.05) half = o.w * 0.22;
+    else half = o.w * 0.5 * (1 - 0.42 * ty) * (0.72 + 0.28 * Math.sin(ty * k * Math.PI + ph));
+    const y = o.base - o.h * ty;
+    L.push([o.x - half * (1 + 0.09 * fbm(ty * 7, o.seed)), y]);
+    R.push([o.x + half * (1 + 0.09 * fbm(ty * 7, o.seed + 9)), y]);
   }
-  return PTS[PTS.length - 1][1];
+  return { L, R, capY: o.base - o.h * (1 - capFrac), top: o.base - o.h };
 }
 
-export const ZONES = [
-  { x0: 0, x1: 300, name: 'Rim Trail', sub: 'Bryce Canyon National Park' },
-  { x0: 300, x1: 500, name: 'Sunrise Point', sub: 'elev. about 8,000 ft' },
-  { x0: 780, x1: 1550, name: "Queen's Garden Trail", sub: 'down into the amphitheater' },
-  { x0: 1550, x1: 2150, name: "Queen's Garden", sub: '' },
-  { x0: 2150, x1: 2540, name: 'Navajo Loop', sub: '' },
-  { x0: 2540, x1: 2980, name: 'Wall Street', sub: 'a narrow slot canyon' },
-  { x0: 2980, x1: 3700, name: "Thor's Hammer", sub: 'the climb back up' },
-  { x0: 3700, x1: 4000, name: 'Sunset Point', sub: '' },
-  { x0: 4000, x1: WORLD_W, name: 'Rim Trail', sub: 'toward Inspiration Point' },
-];
-export const zoneAt = x => ZONES.find(z => x >= z.x0 && x < z.x1);
-
-// ---------- helpers ----------
-export function rng(seed) {
-  return function () {
-    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function canvas(w, h) {
-  const c = document.createElement('canvas');
-  c.width = Math.ceil(w); c.height = Math.ceil(h);
-  return c;
-}
-
-// Claron Formation strata colours (pinks, oranges, creamy limestone whites)
-const STRATA = ['#f3dcc4', '#e9a27a', '#d9764f', '#efc3a0', '#c8604a', '#e7a98c', '#f6e6d2', '#d88a63', '#e39572'];
-const CAP = '#f1e6d4';
-
-function bandColor(bands, y, jitter) {
-  const i = Math.floor((y + 1000 + jitter) / 10) % bands.length;
-  return bands[i];
-}
-
-// ---------- outlined "stamps": draw into a temp canvas, outline, then blit ----------
-const OUTLINE_RGB = hexToRgb('#4a2a26');
-export function outlineCanvas(c, rgb = OUTLINE_RGB, alpha = 255) {
-  const g = c.getContext('2d');
-  const img = g.getImageData(0, 0, c.width, c.height);
-  const d = img.data, W = c.width, H = c.height;
-  const op = new Uint8Array(W * H);
-  for (let i = 0; i < W * H; i++) op[i] = d[i * 4 + 3] > 0 ? 1 : 0;
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x;
-    if (op[i]) continue;
-    if ((x > 0 && op[i - 1]) || (x < W - 1 && op[i + 1]) || (y > 0 && op[i - W]) || (y < H - 1 && op[i + W])) {
-      d[i * 4] = rgb[0]; d[i * 4 + 1] = rgb[1]; d[i * 4 + 2] = rgb[2]; d[i * 4 + 3] = alpha;
-    }
+function paintHoodoo(g, o) {
+  const { L, R, capY, top } = hoodooEdges(o);
+  const detail = o.detail ?? 2;
+  g.save();
+  g.beginPath();
+  g.moveTo(L[0][0], L[0][1]);
+  for (const p of L) g.lineTo(p[0], p[1]);
+  g.quadraticCurveTo(o.x, top - o.h * 0.02, R[R.length - 1][0], R[R.length - 1][1]);
+  for (let i = R.length - 1; i >= 0; i--) g.lineTo(R[i][0], R[i][1]);
+  g.closePath();
+  g.clip();
+  const x0 = o.x - o.w, x1 = o.x + o.w;
+  // horizontal strata bands with soft variation
+  const r = rng(o.seed * 7 + 1);
+  let y = o.base + 2;
+  while (y > top - 2) {
+    const bh = 3 + r() * 8;
+    const idx = Math.abs(Math.floor((y + 1000) / 9.1)) % HBANDS.length;
+    let col = HBANDS[idx];
+    if (o.haze) col = mix(col, HAZE, o.haze);
+    g.fillStyle = col;
+    g.fillRect(x0, y - bh, x1 - x0, bh + 0.6);
+    y -= bh;
   }
-  g.putImageData(img, 0, 0);
-  return c;
-}
-function stamp(g, cx, baseY, w, h, paint, outline) {
-  const tw = Math.ceil(w) + 8, th = Math.ceil(h) + 6;
-  const c = canvas(tw, th), tg = c.getContext('2d');
-  const ox = Math.round(tw / 2), oy = th - 3;
-  paint(tg, ox, oy);
-  if (outline) outlineCanvas(c, outline);
-  g.drawImage(c, Math.round(cx) - ox, Math.round(baseY) - oy);
-}
-
-/** A single hoodoo: stacked bulges and necks with a pale cap rock, 3-tone shaded and outlined. */
-function drawHoodoo(g, cx, baseY, w, h, r, bands, opts = {}) {
-  const k = 2.2 + r() * 3.2, ph = r() * 6.28;
-  const capH = Math.max(3, Math.round(h * (opts.capFrac ?? 0.1)));
-  const neckH = Math.max(2, Math.round(h * 0.05));
-  const capCol = opts.cap ?? CAP;
-  const capShade = shade(capCol, -0.16), capLight = shade(capCol, 0.35);
-  const outline = opts.outline === undefined ? OUTLINE_RGB : opts.outline;
-  stamp(g, cx, baseY, w + 2, h, (tg, ox, oy) => {
-    for (let y = 0; y < h; y++) {
-      const ty = y / h;
-      let half, col;
-      const isCap = y >= h - capH;
-      if (isCap) {
-        const cy = (y - (h - capH)) / capH;
-        half = w * (opts.capW ?? 0.42) * Math.sqrt(Math.max(0.05, 1 - cy * cy * 0.85));
-        col = capCol;
-      } else if (y >= h - capH - neckH) {
-        half = w * 0.2;
-        col = bandColor(bands.base, baseY - y, 0);
-      } else {
-        half = w * 0.5 * (1 - 0.45 * ty) * (0.74 + 0.26 * Math.sin(ty * k * Math.PI + ph));
-        col = bandColor(bands.base, baseY - y, 0);
-      }
-      half = Math.max(1, half);
-      const wy = oy - y;
-      const x0 = Math.round(ox - half), ww = Math.max(1, Math.round(half * 2));
-      const i = STRATA_INDEX(bands, col);
-      tg.fillStyle = col; tg.fillRect(x0, wy, ww, 1);
-      const sw = Math.max(1, Math.round(ww * 0.3));
-      tg.fillStyle = isCap ? capShade : bands.dark[i]; tg.fillRect(x0 + ww - sw, wy, sw, 1);
-      const lw = Math.max(1, Math.round(ww * 0.22));
-      if (ww > 2) { tg.fillStyle = isCap ? capLight : bands.light[i]; tg.fillRect(x0, wy, lw, 1); }
-      // little pits and cracks
-      if (!isCap && ww > 5 && ((y * 7 + x0 * 3) % 23) === 0) { tg.fillStyle = bands.dark[i]; tg.fillRect(x0 + lw + 1, wy, 1, 1); }
+  // caprock
+  g.fillStyle = lin(g, 0, top, 0, capY + 2, [[0, mix(CAP, HAZE, o.haze || 0)], [1, mix(shade(CAP, -0.08), HAZE, o.haze || 0)]]);
+  g.fillRect(x0, top - 2, x1 - x0, capY - top + 2.5);
+  // form shading: light from upper left, cool violet shadow on the right
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = lin(g, o.x - o.w * 0.5, 0, o.x + o.w * 0.5, 0, [[0, '#ffffff'], [0.45, '#f6ece8'], [1, mix(SHADOW, '#ffffff', 0.15 + (o.haze || 0) * 0.6)]]);
+  g.fillRect(x0, top - 2, x1 - x0, o.base - top + 4);
+  if (detail >= 2) {
+    // vertical rills / gullies
+    g.strokeStyle = 'rgba(90,40,50,0.18)'; g.lineWidth = 0.5;
+    for (let i = 0; i < 4 + o.w / 3; i++) {
+      const rx = o.x + (r() - 0.5) * o.w * 0.8, ry = o.base - r() * o.h * 0.8;
+      g.beginPath(); g.moveTo(rx, ry);
+      g.quadraticCurveTo(rx + (r() - 0.5) * 2, ry - 6, rx + (r() - 0.5) * 1.5, ry - 6 - r() * 10); g.stroke();
     }
-  }, outline);
-}
-function STRATA_INDEX(bands, col) {
-  const i = bands.base.indexOf(col);
-  return i < 0 ? 0 : i;
-}
-function makeBands(haze = 0, hazeCol = '#c9b8d8') {
-  // soften the stripes a little toward a warm mid-tone so hoodoos don't look like candy canes
-  const base = STRATA.map(c => mix(mix(c, '#e8a07a', 0.32), hazeCol, haze));
-  return { base, dark: base.map(c => shade(c, -0.18)), light: base.map(c => shade(c, 0.2)) };
+    // pits
+    g.fillStyle = 'rgba(80,30,40,0.22)';
+    for (let i = 0; i < o.h / 10; i++) { ellipse(g, o.x + (r() - 0.5) * o.w * 0.6, o.base - r() * o.h * 0.85, 0.4 + r() * 1.2, 0.3 + r() * 0.7); g.fill(); }
+    // grit
+    g.globalAlpha = 0.28;
+    g.fillStyle = g.createPattern(grain(), 'repeat');
+    g.save(); g.scale(0.12, 0.12); g.fillRect(x0 / 0.12, (top - 2) / 0.12, (x1 - x0) / 0.12, (o.base - top + 4) / 0.12); g.restore();
+    g.globalAlpha = 1;
+  }
+  // base occlusion
+  g.fillStyle = lin(g, 0, o.base, 0, o.base - 14, [[0, 'rgba(60,25,30,0.45)'], [1, 'rgba(60,25,30,0)']]);
+  g.fillRect(x0, o.base - 14, x1 - x0, 15);
+  g.globalCompositeOperation = 'screen';
+  // warm rim light on the lit edge
+  g.fillStyle = lin(g, o.x - o.w * 0.55, 0, o.x - o.w * 0.15, 0, [[0, `rgba(255,214,170,${o.haze ? 0.1 : 0.35})`], [1, 'rgba(255,214,170,0)']]);
+  g.fillRect(x0, top - 2, x1 - x0, o.base - top + 4);
+  g.globalCompositeOperation = 'source-over';
+  g.restore();
 }
 
-/** Tiered, scalloped conifer (ponderosa pine or Douglas fir), outlined. */
-function drawPine(g, x, baseY, h, r, kind = 'pine', haze = 0, outline) {
-  const hz = c => mix(c, '#c9b8d8', haze);
-  const fir = kind === 'fir';
-  const trunk = hz(fir ? '#6a4630' : '#9a5632'), trunkD = hz(fir ? '#4a2e1e' : '#6a3a22');
-  const dark = hz(fir ? '#24503a' : '#2f6a42'), mid = hz(fir ? '#336e4a' : '#43894f'), light = hz(fir ? '#4f8f5a' : '#6aae5f');
-  const tiers = fir ? 5 + Math.floor(r() * 2) : 3 + Math.floor(r() * 2);
-  const crownStart = fir ? 0.14 : 0.3;
-  const maxHalf = fir ? h * 0.17 : h * 0.24;
-  if (outline === undefined) outline = haze > 0.3 ? null : hexToRgb(mix('#2a3a2a', '#c9b8d8', haze));
-  stamp(g, x, baseY, maxHalf * 2 + 4, h, (tg, ox, oy) => {
-    tg.fillStyle = trunk; tg.fillRect(ox - 1, oy - h, 3, h);
-    tg.fillStyle = trunkD; tg.fillRect(ox + 1, oy - h, 1, h);
-    const crownH = h * (1 - crownStart);
-    const tierH = crownH / (tiers - 0.35);
-    for (let t = 0; t < tiers; t++) {
-      const bottom = h * crownStart + t * tierH * 0.78;
-      const top = bottom + tierH;
-      const tierHalf = maxHalf * (1 - t / (tiers + 0.6)) * (0.9 + r() * 0.2);
-      for (let y = Math.round(bottom); y < Math.min(h + 2, Math.round(top)); y++) {
-        const ty = (y - bottom) / tierH;
-        let half = tierHalf * (1 - ty) + 1;
-        const wy = oy - y;
-        // scalloped lower edge
-        if (y === Math.round(bottom)) half *= 0.85;
-        const x0 = Math.round(ox - half), ww = Math.max(2, Math.round(half * 2));
-        tg.fillStyle = mid; tg.fillRect(x0, wy, ww, 1);
-        tg.fillStyle = dark; tg.fillRect(x0 + Math.round(ww * 0.62), wy, Math.ceil(ww * 0.38), 1);
-        tg.fillStyle = light; tg.fillRect(x0, wy, Math.max(1, Math.round(ww * 0.22)), 1);
-        if (y === Math.round(bottom)) {
-          tg.fillStyle = dark;
-          for (let xx = x0; xx < x0 + ww; xx += 3) tg.fillRect(xx, wy + 1, 2, 1);
-        }
+function paintPine(g, o) {
+  const r = rng(o.seed);
+  const fir = o.kind === 'fir';
+  const hz = c => (o.haze ? mix(c, HAZE, o.haze) : c);
+  const { x, base, h } = o;
+  // trunk
+  const tw = Math.max(0.8, h * (fir ? 0.028 : 0.035));
+  g.fillStyle = lin(g, x - tw, 0, x + tw, 0, [[0, hz(fir ? '#7a5038' : '#b66a3c')], [1, hz(fir ? '#3e2618' : '#6a3420')]]);
+  g.beginPath(); g.moveTo(x - tw, base); g.lineTo(x - tw * 0.3, base - h); g.lineTo(x + tw * 0.3, base - h); g.lineTo(x + tw, base); g.fill();
+  if (!fir && !o.haze) { // bark plates
+    g.strokeStyle = 'rgba(60,25,15,0.35)'; g.lineWidth = 0.25;
+    for (let i = 0; i < h / 3; i++) { const yy = base - r() * h * 0.6; g.beginPath(); g.moveTo(x - tw * 0.7, yy); g.lineTo(x + tw * 0.4, yy - 0.6); g.stroke(); }
+  }
+  const dark = hz(fir ? '#1d3a2c' : '#22402a'), mid = hz(fir ? '#2c5a40' : '#365f3a'), light = hz(fir ? '#4a7e58' : '#5f8a4c');
+  if (fir) {
+    const clumps = 9 + (h / 12 | 0);
+    for (let i = 0; i < clumps; i++) {
+      const ty = 0.12 + (i / clumps) * 0.88;
+      const cy = base - h * ty;
+      const cr = (1 - ty) * h * 0.22 + 1.2;
+      const cx = x + (r() - 0.5) * cr * 0.3;
+      const cry = Math.max(1.2, cr * 0.35);
+      g.fillStyle = rad(g, cx - cr * 0.3, cy - cry * 0.5, 0, cr * 1.2, [[0, light], [0.45, mid], [1, dark]]);
+      g.beginPath(); g.moveTo(cx - cr, cy + cry * 0.6); g.quadraticCurveTo(cx, cy - cry * 1.6, cx + cr, cy + cry * 0.6); g.quadraticCurveTo(cx, cy + cry * 0.2, cx - cr, cy + cry * 0.6); g.fill();
+    }
+    return;
+  }
+  // Ponderosa: upswept branches ending in tufts of long needles
+  const tufts = [];
+  const nb = 9 + (h / 6 | 0);
+  for (let i = 0; i < nb; i++) {
+    const ty = 0.36 + Math.pow(r(), 0.8) * 0.64;
+    const by = base - h * ty;
+    const side = r() < 0.5 ? -1 : 1;
+    const len = h * (0.06 + 0.2 * Math.sin(Math.min(1, (1 - ty) * 1.6 + 0.15) * Math.PI * 0.9)) * (0.6 + r() * 0.6);
+    const ex = x + side * len, ey = by - len * (0.15 + r() * 0.35);
+    g.strokeStyle = hz('#5a3422'); g.lineWidth = Math.max(0.25, tw * 0.45);
+    g.beginPath(); g.moveTo(x, by); g.quadraticCurveTo(x + side * len * 0.5, by + 0.5, ex, ey); g.stroke();
+    tufts.push([ex, ey, 1.6 + r() * 2.4 + h * 0.02]);
+    if (r() < 0.6) tufts.push([x + side * len * 0.55, by - len * 0.12, 1.2 + r() * 1.6 + h * 0.015]);
+  }
+  tufts.push([x, base - h, 1.8 + h * 0.02]);
+  for (const [tx, ty, tr] of tufts) {
+    // shadowed underside, then lit top, then needle strokes
+    g.fillStyle = dark; ellipse(g, tx, ty + tr * 0.15, tr * 1.15, tr * 0.7); g.fill();
+    g.fillStyle = mid; ellipse(g, tx - tr * 0.15, ty - tr * 0.1, tr * 0.9, tr * 0.5); g.fill();
+    if (!o.haze || o.haze < 0.3) {
+      g.strokeStyle = light; g.lineWidth = 0.16;
+      for (let k = 0; k < 9; k++) {
+        const a = -Math.PI + (k / 8) * Math.PI + (r() - 0.5) * 0.3;
+        g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + Math.cos(a) * tr * 1.25, ty + Math.sin(a) * tr * 0.9); g.stroke();
       }
     }
-    // tip
-    tg.fillStyle = mid; tg.fillRect(ox, oy - h - 1, 1, 2);
-  }, outline);
+  }
 }
 
-/** Twisted bristlecone pine, baked as its own little canvas (interactive object). */
-export function makeBristlecone() {
-  const c = canvas(34, 44), g = c.getContext('2d');
-  const r = rng(77);
-  // gnarled trunk
-  const bark = ['#c9a27a', '#8a5a32', '#e3c9a0'];
-  let x = 17;
-  for (let y = 43; y > 14; y--) {
-    x += Math.sin(y * 0.35) * 0.7;
-    const w = 3 + Math.round((43 - y) < 6 ? 2 : 0) + (y % 7 === 0 ? 1 : 0);
-    g.fillStyle = bark[0]; g.fillRect(Math.round(x - w / 2), y, w, 1);
-    g.fillStyle = bark[1]; g.fillRect(Math.round(x + w / 2) - 1, y, 1, 1);
-    if (y % 3 === 0) { g.fillStyle = bark[2]; g.fillRect(Math.round(x - w / 2), y, 1, 1); }
+function paintShrub(g, o) {
+  const r = rng(o.seed);
+  const cols = o.kind === 'sage' ? ['#9aa88a', '#7b8c70', '#b9c4a6'] : ['#5e7a4a', '#3f5a36', '#86a062'];
+  for (let i = 0; i < 6; i++) {
+    const cx = o.x + (r() - 0.5) * o.w, cy = o.base - r() * o.w * 0.35, cr = o.w * (0.18 + r() * 0.18);
+    g.fillStyle = rad(g, cx - cr * 0.3, cy - cr * 0.4, 0, cr, [[0, cols[2]], [0.5, cols[0]], [1, cols[1]]]);
+    ellipse(g, cx, cy, cr, cr * 0.75); g.fill();
   }
-  // branches
-  const branches = [[17, 26, -1], [17, 20, 1], [18, 16, -1], [16, 32, 1]];
-  for (const [bx, by, d] of branches) {
-    for (let i = 0; i < 10; i++) {
-      g.fillStyle = bark[1];
-      g.fillRect(bx + d * i, by - Math.round(i * 0.6), 1, 1);
-    }
-    // bottlebrush tufts
-    for (let t = 0; t < 14; t++) {
-      g.fillStyle = r() < 0.5 ? '#2f5d3a' : '#4a7a50';
-      g.fillRect(bx + d * (5 + Math.round(r() * 7)), by - 8 + Math.round(r() * 6), 2, 1);
-    }
-  }
-  for (let t = 0; t < 22; t++) {
-    g.fillStyle = r() < 0.5 ? '#2f5d3a' : '#4a7a50';
-    g.fillRect(12 + Math.round(r() * 10), 6 + Math.round(r() * 10), 2, 1);
-  }
-  return outlineCanvas(c);
+  if (o.kind === 'manzanita') { g.strokeStyle = '#8a2a1e'; g.lineWidth = 0.35; for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(o.x + (r() - 0.5) * 2, o.base); g.lineTo(o.x + (r() - 0.5) * o.w * 0.6, o.base - o.w * 0.3); g.stroke(); } }
+  if (o.flowers) { for (let i = 0; i < 6; i++) { g.fillStyle = o.flowers; circle(g, o.x + (r() - 0.5) * o.w, o.base - r() * o.w * 0.4, 0.45); g.fill(); } }
 }
 
-// ---------- background layers ----------
-export const LAYERS = [
-  // p = parallax factor, base = screen y of the layer's baseline when camY == 0
-  { name: 'plateau', p: 0.06, base: 70 },
-  { name: 'far', p: 0.22, base: 104 },
-  { name: 'mid', p: 0.48, base: 140 },
-];
-const LAYER_H = 380, LAYER_BASE = 230;
+function paintBoulder(g, o, surface) {
+  const r = rng(o.seed);
+  const top = surface - o.h;
+  g.save();
+  g.beginPath();
+  const pts = 14;
+  for (let i = 0; i <= pts; i++) {
+    const a = Math.PI + (i / pts) * Math.PI;
+    const rr = 1 + (r() - 0.5) * 0.18;
+    g.lineTo(o.x + Math.cos(a) * o.w / 2 * rr, surface + 1 + Math.sin(a) * (o.h + 1) * rr);
+  }
+  g.closePath();
+  if (o.kind === 'log') {
+    g.restore(); g.save();
+    g.fillStyle = lin(g, 0, top, 0, surface, [[0, '#9a7452'], [1, '#5a3c26']]);
+    g.beginPath(); g.roundRect(o.x - o.w / 2, top, o.w, o.h + 0.5, o.h / 2); g.fill();
+    g.fillStyle = '#c9a27a'; ellipse(g, o.x + o.w / 2 - 0.5, top + o.h / 2, o.h * 0.35, o.h / 2); g.fill();
+    g.strokeStyle = '#8a6a48'; g.lineWidth = 0.25; ellipse(g, o.x + o.w / 2 - 0.5, top + o.h / 2, o.h * 0.18, o.h * 0.26); g.stroke();
+    g.strokeStyle = 'rgba(40,20,10,0.35)'; for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(o.x - o.w / 2 + 1, top + 1 + i * o.h / 4); g.lineTo(o.x + o.w / 2 - 2, top + 1.3 + i * o.h / 4); g.stroke(); }
+    g.restore();
+    return;
+  }
+  g.fillStyle = lin(g, o.x - o.w / 2, top, o.x + o.w / 2, surface, [[0, '#f2c6a4'], [0.5, '#d98a64'], [1, '#8a4a44']]);
+  g.fill();
+  g.clip();
+  g.globalAlpha = 0.3; g.fillStyle = g.createPattern(grain(), 'repeat');
+  g.save(); g.scale(0.12, 0.12); g.fillRect((o.x - o.w) / 0.12, (top - 2) / 0.12, (o.w * 2) / 0.12, (o.h + 4) / 0.12); g.restore();
+  g.globalAlpha = 1;
+  g.fillStyle = 'rgba(255,240,220,0.35)'; ellipse(g, o.x - o.w * 0.18, top + o.h * 0.2, o.w * 0.25, o.h * 0.12); g.fill();
+  g.restore();
+}
 
-function bakeLayer(def, viewW) {
-  const w = WORLD_W * def.p + viewW + 40;
-  const c = canvas(w, LAYER_H), g = c.getContext('2d');
+function paintLedge(g, p) {
+  const t = p.y;
+  g.fillStyle = lin(g, 0, t - 1, 0, t + 5, [[0, '#f0caa8'], [0.4, '#d48a62'], [1, 'rgba(120,60,50,0)']]);
+  g.beginPath(); g.moveTo(p.x0 - 1, t); g.lineTo(p.x1 + 1, t); g.quadraticCurveTo(p.x1 - 2, t + 6, (p.x0 + p.x1) / 2, t + 7); g.quadraticCurveTo(p.x0 + 2, t + 6, p.x0 - 1, t); g.fill();
+  g.fillStyle = '#b5d07a'; for (let x = p.x0; x < p.x1; x += 2.2) { g.fillRect(x, t - 0.6, 0.35, 0.8); }
+}
+
+function paintArch(g, o) {
+  // a natural rock bridge/window: thick fin with an opening
+  const { x, base, w, h, hole } = o;
+  g.save();
+  g.beginPath();
+  g.moveTo(x - w / 2, base);
+  g.bezierCurveTo(x - w / 2 - 3, base - h * 0.6, x - w * 0.3, base - h, x, base - h);
+  g.bezierCurveTo(x + w * 0.3, base - h, x + w / 2 + 3, base - h * 0.6, x + w / 2, base);
+  g.closePath();
+  g.moveTo(x - hole.w / 2, base);
+  g.bezierCurveTo(x - hole.w / 2, base - hole.h, x + hole.w / 2, base - hole.h, x + hole.w / 2, base);
+  g.closePath();
+  g.clip('evenodd');
+  paintHoodoo(g, { x, base, w: w * 1.25, h: h * 1.02, seed: o.seed, capFrac: 0.02, detail: 2 });
+  g.restore();
+  // inner shadow of opening
+  g.strokeStyle = 'rgba(70,30,40,0.35)'; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(x - hole.w / 2, base); g.bezierCurveTo(x - hole.w / 2, base - hole.h, x + hole.w / 2, base - hole.h, x + hole.w / 2, base); g.stroke();
+}
+
+function paintWall(g, o) {
+  // towering canyon wall (Wall Street / grotto)
+  const r = rng(o.seed);
+  g.save();
+  g.beginPath();
+  g.moveTo(o.x0, YBOT);
+  for (let x = o.x0; x <= o.x1; x += 3) {
+    const edge = Math.min(x - o.x0, o.x1 - x);
+    const yy = o.top + Math.max(0, (o.taper ?? 40) - edge) * 2.2 + fbm(x / 30, o.seed) * 8;
+    g.lineTo(x, yy);
+  }
+  g.lineTo(o.x1, YBOT);
+  g.closePath();
+  g.clip();
+  const base = o.color || '#b8603e';
+  g.fillStyle = lin(g, 0, o.top, 0, o.bottom, [[0, shade(base, 0.12)], [0.5, base], [1, shade(base, -0.35)]]);
+  g.fillRect(o.x0, YTOP, o.x1 - o.x0, YBOT - YTOP);
+  // horizontal bedding
+  for (let y = YTOP; y < o.bottom; y += 4 + r() * 6) { g.fillStyle = r() < 0.5 ? 'rgba(255,220,190,0.08)' : 'rgba(60,20,20,0.1)'; g.fillRect(o.x0, y, o.x1 - o.x0, 1 + r() * 3); }
+  // vertical streaks (desert varnish / seeps)
+  for (let i = 0; i < (o.x1 - o.x0) / 6; i++) {
+    const sx = o.x0 + r() * (o.x1 - o.x0), sw = 0.5 + r() * 2.5;
+    g.fillStyle = lin(g, 0, YTOP, 0, o.bottom, [[0, 'rgba(40,15,20,0)'], [0.4, `rgba(40,15,20,${0.12 + r() * 0.18})`], [1, 'rgba(40,15,20,0.02)']]);
+    g.fillRect(sx, YTOP, sw, o.bottom - YTOP);
+  }
+  if (o.wet) for (let i = 0; i < 18; i++) { const sx = o.x0 + 60 + r() * (o.x1 - o.x0 - 120); g.fillStyle = 'rgba(30,20,30,0.25)'; g.fillRect(sx, o.bottom - 60 - r() * 40, 0.8 + r(), 50 + r() * 40); }
+  g.globalAlpha = 0.25; g.fillStyle = g.createPattern(grain(), 'repeat');
+  g.save(); g.scale(0.15, 0.15); g.fillRect(o.x0 / 0.15, YTOP / 0.15, (o.x1 - o.x0) / 0.15, (YBOT - YTOP) / 0.15); g.restore();
+  g.globalAlpha = 1;
+  g.restore();
+}
+
+function paintSpecial(g, o) {
+  if (o.kind === 'queen') {
+    paintHoodoo(g, { x: o.x, base: o.base, w: 22, h: 72, seed: 3, capFrac: 0.04 });
+    g.fillStyle = lin(g, o.x - 6, 0, o.x + 6, 0, [[0, '#fbf3e8'], [1, '#c9b8a8']]);
+    g.beginPath(); g.ellipse(o.x, o.base - 76, 5, 4, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(o.x + 0.5, o.base - 83, 2.6, 3.2, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(o.x, o.base - 86.5, 1.8, 1.2, 0, 0, Math.PI * 2); g.fill();
+  } else if (o.kind === 'thor') {
+    paintHoodoo(g, { x: o.x, base: o.base, w: 13, h: 118, seed: 11, capFrac: 0.01, capW: 0.3 });
+    g.fillStyle = lin(g, o.x - 10, 0, o.x + 10, 0, [[0, '#fbf3e8'], [0.6, '#e6d6c4'], [1, '#a8908a']]);
+    g.beginPath(); g.roundRect(o.x - 10, o.base - 129, 20, 11, 2); g.fill();
+    g.fillStyle = 'rgba(80,40,40,0.3)'; g.fillRect(o.x - 10, o.base - 119.5, 20, 1.5);
+  } else if (o.kind === 'seep') {
+    // pool + dripping ferns
+    g.fillStyle = lin(g, 0, o.base - 1, 0, o.base + 3, [[0, '#5a8aa0'], [1, '#2a4a5a']]);
+    ellipse(g, o.x, o.base + 0.6, 26, 2.4); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.35)'; ellipse(g, o.x - 6, o.base, 8, 0.5); g.fill();
+    const r = rng(19);
+    for (let i = 0; i < 24; i++) {
+      const fx = o.x - 40 + r() * 80, fy = o.base - 40 - r() * 30;
+      g.strokeStyle = r() < 0.5 ? '#4f7a3a' : '#6aa04a'; g.lineWidth = 0.4;
+      for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(fx, fy); g.quadraticCurveTo(fx + (k - 2) * 1.5, fy + 2, fx + (k - 2) * 2.4, fy + 5 + r() * 3); g.stroke(); }
+      if (r() < 0.4) { g.fillStyle = '#e0405a'; circle(g, fx + (r() - 0.5) * 3, fy + 3 + r() * 2, 0.6); g.fill(); }
+    }
+  } else if (o.kind === 'telescope') {
+    g.strokeStyle = '#3a3a44'; g.lineWidth = 0.6;
+    g.beginPath(); g.moveTo(o.x, o.base); g.lineTo(o.x - 3, o.base - 9); g.moveTo(o.x, o.base); g.lineTo(o.x + 3, o.base - 9); g.moveTo(o.x, o.base); g.lineTo(o.x, o.base - 9); g.stroke();
+    g.fillStyle = '#e8e2d6'; g.save(); g.translate(o.x, o.base - 10); g.rotate(-0.5); g.beginPath(); g.roundRect(-5, -1.3, 10, 2.6, 1); g.fill(); g.restore();
+  }
+}
+
+function paintFence(g, a, b, groundY) {
+  for (let x = a; x <= b; x += 0.8) {
+    const gy = groundY(x);
+    g.fillStyle = '#9a6a42'; g.fillRect(x, gy - 9.5, 0.9, 0.9); g.fillRect(x, gy - 5.5, 0.9, 0.8);
+    g.fillStyle = '#c99a6a'; g.fillRect(x, gy - 9.5, 0.9, 0.3);
+  }
+  for (let x = a; x <= b; x += 20) {
+    const gy = groundY(x);
+    g.fillStyle = lin(g, x - 1, 0, x + 1.5, 0, [[0, '#c99a6a'], [1, '#6e4a2c']]);
+    g.fillRect(x - 0.8, gy - 12, 2, 12.5);
+  }
+}
+
+// ------------------------------------------------------------------ terrain (ground surface + cliff face)
+function paintTerrain(g, area, tx0, tx1) {
+  const theme = area.theme;
+  const top = [];
+  for (let x = tx0 - 2; x <= tx1 + 2; x += 1) top.push([x, area.groundY(x)]);
+  g.save();
+  g.beginPath();
+  g.moveTo(tx0 - 2, YBOT);
+  for (const [x, y] of top) g.lineTo(x, y);
+  g.lineTo(tx1 + 2, YBOT);
+  g.closePath();
+  g.clip();
+  // soil / rock body with soft strata
+  const rimLike = x => area.isRim(x);
+  const r = rng(Math.floor(tx0) + 7);
+  for (let y = YTOP; y < YBOT; y += 3) {
+    const idx = Math.abs(Math.floor((y + 1000) / 9)) % STRATA.length;
+    g.fillStyle = theme === 'seep' ? mix(STRATA[idx], '#5a4a48', 0.45) : STRATA[idx];
+    g.fillRect(tx0 - 2, y, tx1 - tx0 + 4, 3.4);
+  }
+  g.globalCompositeOperation = 'multiply';
+  // shade by depth below the surface
+  for (let x = tx0 - 2; x < tx1 + 2; x += 4) {
+    const gy = area.groundY(x);
+    g.fillStyle = lin(g, 0, gy, 0, gy + 120, [[0, '#ffffff'], [0.08, '#e8d4cc'], [1, mix(SHADOW, '#000000', 0.25)]]);
+    g.fillRect(x, gy, 4.5, YBOT - gy);
+  }
+  g.globalAlpha = 0.35; g.fillStyle = g.createPattern(grain(), 'repeat');
+  g.save(); g.scale(0.14, 0.14); g.fillRect((tx0 - 2) / 0.14, YTOP / 0.14, (tx1 - tx0 + 4) / 0.14, (YBOT - YTOP) / 0.14); g.restore();
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  // embedded rocks
+  for (let i = 0; i < (tx1 - tx0) / 9; i++) {
+    const x = tx0 + r() * (tx1 - tx0), gy = area.groundY(x), y = gy + 6 + r() * 60;
+    const rw = 2 + r() * 6;
+    g.fillStyle = lin(g, x - rw, y - rw, x + rw, y + rw, [[0, 'rgba(255,230,210,0.35)'], [1, 'rgba(90,40,40,0.35)']]);
+    ellipse(g, x, y, rw, rw * 0.55, (r() - 0.5) * 0.5); g.fill();
+  }
+  g.restore();
+  // surface: trail dust + edge
+  g.lineCap = 'round';
+  for (let x = tx0 - 2; x < tx1 + 2; x += 1) {
+    const gy = area.groundY(x);
+    const rim = rimLike(x);
+    g.fillStyle = theme === 'seep' ? '#7a6a52' : rim ? '#b8a878' : '#e2c29a';
+    g.fillRect(x, gy - 0.2, 1.05, 1.6);
+    g.fillStyle = theme === 'seep' ? '#5a7a3a' : rim ? '#8aa05a' : '#f2dcbc';
+    g.fillRect(x, gy - 0.6, 1.05, 0.5);
+  }
+  // pebbles, grass & sage along the surface
+  for (let x = tx0; x < tx1; x += 1.2 + r() * 3) {
+    const gy = area.groundY(x);
+    const rim = rimLike(x);
+    if (rim || theme === 'seep') {
+      g.strokeStyle = r() < 0.5 ? '#6a8a44' : '#9ab866'; g.lineWidth = 0.25;
+      for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(x + k * 0.3, gy); g.quadraticCurveTo(x + k * 0.3 + (r() - 0.5), gy - 1.5, x + k * 0.6 + (r() - 0.5) * 1.5, gy - 2 - r() * 2); g.stroke(); }
+      if (r() < 0.05) { g.fillStyle = r() < 0.5 ? '#f6e6a0' : '#e9a0c0'; circle(g, x, gy - 2.5, 0.45); g.fill(); }
+    } else if (r() < 0.5) {
+      g.fillStyle = lin(g, 0, gy - 1, 0, gy + 0.5, [[0, '#f6e2c8'], [1, '#b88a66']]);
+      ellipse(g, x, gy - 0.2, 0.4 + r() * 0.8, 0.3 + r() * 0.4); g.fill();
+    }
+  }
+}
+
+// ------------------------------------------------------------------ Area
+export class Area {
+  constructor(def) {
+    Object.assign(this, def);
+    this.pts = def.points;
+    this.tiles = new Map();
+    this.obstacles = def.obstacles || [];
+    this.platforms = def.platforms || [];
+    for (const o of this.obstacles) o.top = this.groundY(o.x) - o.h;
+    this.decor = def.decor(this);
+    this.decor.sort((a, b) => (a.z || 0) - (b.z || 0));
+  }
+  groundY(x) {
+    const P = this.pts;
+    if (x <= P[0][0]) return P[0][1];
+    for (let i = 1; i < P.length; i++) {
+      const [x1, y1] = P[i];
+      if (x <= x1) {
+        const [x0, y0] = P[i - 1];
+        const t = (x - x0) / (x1 - x0);
+        return y0 + (y1 - y0) * (1 - Math.cos(t * Math.PI)) / 2;
+      }
+    }
+    return P[P.length - 1][1];
+  }
+  isRim(x) { return this.rim ? this.rim(x) : false; }
+  zoneAt(x) { return (this.zones || []).find(z => x >= z.x0 && x < z.x1); }
+
+  /** Highest walkable surface at x that is at or below y (+tolerance). */
+  supportAt(x, y, tol = 2) {
+    let best = this.groundY(x);
+    for (const o of this.obstacles) if (Math.abs(x - o.x) <= o.w / 2 && o.top >= y - tol && o.top < best) best = o.top;
+    for (const p of this.platforms) if (x >= p.x0 && x <= p.x1 && p.y >= y - tol && p.y < best) best = p.y;
+    return best;
+  }
+  /** Obstacle blocking horizontal movement into x at height y. */
+  blockerAt(x, y) {
+    for (const o of this.obstacles) if (Math.abs(x - o.x) <= o.w / 2 + 2.2 && y > o.top + 1.2) return o;
+    return null;
+  }
+
+  tile(i, S) {
+    const key = i + ':' + S;
+    let t = this.tiles.get(key);
+    if (t) { this.tiles.delete(key); this.tiles.set(key, t); return t; }
+    const tx0 = i * TILE_W, tx1 = tx0 + TILE_W;
+    const c = canvas(TILE_W * S, (YBOT - YTOP) * S), g = c.getContext('2d');
+    g.scale(S, S); g.translate(-tx0, -YTOP);
+    for (const o of this.decor) {
+      if (o.x1 !== undefined ? (o.x1 < tx0 - 2 || o.x0 > tx1 + 2) : Math.abs(o.x - (tx0 + tx1) / 2) > TILE_W / 2 + (o.w || 10) + 4) continue;
+      if (o.layer === 'front') continue;
+      paint(g, o, this);
+    }
+    paintTerrain(g, this, tx0, tx1);
+    for (const p of this.platforms) if (p.x1 > tx0 - 4 && p.x0 < tx1 + 4) paintLedge(g, p);
+    for (const o of this.obstacles) if (Math.abs(o.x - (tx0 + tx1) / 2) < TILE_W / 2 + o.w) paintBoulder(g, o, this.groundY(o.x));
+    for (const o of this.decor) {
+      if (o.layer !== 'front') continue;
+      if (Math.abs(o.x - (tx0 + tx1) / 2) > TILE_W / 2 + (o.w || 10) + 4) continue;
+      paint(g, o, this);
+    }
+    t = c;
+    this.tiles.set(key, t);
+    while (this.tiles.size > 7) this.tiles.delete(this.tiles.keys().next().value);
+    return t;
+  }
+  /** Bake tiles around x during idle time so walking stays smooth. */
+  prewarm(x, S) {
+    const i = Math.floor(x / TILE_W);
+    for (const j of [i, i + 1, i - 1, i + 2, i - 2]) {
+      if (j < 0 || j * TILE_W > this.width) continue;
+      if (!this.tiles.has(j + ':' + S)) { this.tile(j, S); return; }
+    }
+  }
+  drawNear(ctx, ox, oy, W, H, S) {
+    const i0 = Math.floor(ox / TILE_W), i1 = Math.floor((ox + W) / TILE_W);
+    for (let i = i0; i <= i1; i++) {
+      if (i < 0 || i * TILE_W > this.width) continue;
+      const t = this.tile(i, S);
+      ctx.drawImage(t, i * TILE_W - ox, YTOP - oy, TILE_W + 0.02, YBOT - YTOP);
+    }
+  }
+}
+
+function paint(g, o, area) {
+  switch (o.type) {
+    case 'hoodoo': paintHoodoo(g, o); break;
+    case 'pine': paintPine(g, o); break;
+    case 'shrub': paintShrub(g, o); break;
+    case 'wall': paintWall(g, o); break;
+    case 'arch': paintArch(g, o); break;
+    case 'special': paintSpecial(g, o); break;
+    case 'fence': paintFence(g, o.x0, o.x1, x => area.groundY(x)); break;
+  }
+}
+
+// ------------------------------------------------------------------ background layers (baked once)
+export const LAYER_BASE = 230;
+const LAYER_H = 380;
+export function bakeBackground(kind, p, areaW, viewW, S) {
+  const w = areaW * p + viewW + 60;
+  const sc = S;
+  const c = canvas(w * sc, LAYER_H * sc), g = c.getContext('2d');
+  g.scale(sc, sc);
   const B = LAYER_BASE;
-  if (def.name === 'plateau') {
-    const r = rng(11);
-    // distant blue plateau with soft ridges
-    const col = '#9aa0c8', col2 = '#b3b3d6';
-    let y = B - 22;
-    for (let x = 0; x < w; x++) {
-      y += (r() - 0.5) * 1.2 + Math.sin(x / 90) * 0.15;
-      y = Math.max(B - 40, Math.min(B - 8, y));
-      g.fillStyle = col2; g.fillRect(x, Math.round(y) - 6, 1, 6);
-      g.fillStyle = col; g.fillRect(x, Math.round(y), 1, LAYER_H);
+  const r = rng(kind.length * 31 + Math.round(p * 100));
+  if (kind === 'plateau') {
+    for (const [off, col, amp] of [[-38, '#aab0d4', 10], [-24, '#9aa2c8', 7]]) {
+      g.fillStyle = col;
+      g.beginPath(); g.moveTo(0, LAYER_H);
+      for (let x = 0; x <= w; x += 4) g.lineTo(x, B + off + fbm(x / 120, off) * amp);
+      g.lineTo(w, LAYER_H); g.fill();
     }
     return c;
   }
-  const far = def.name === 'far';
-  const bands = makeBands(far ? 0.5 : 0.22);
-  const r = rng(far ? 21 : 33);
-  const baseCol = mix('#d98a63', '#c9b8d8', far ? 0.55 : 0.28);
-  // hoodoo forest
-  let x = 0;
-  while (x < w) {
-    const hw = far ? 4 + r() * 7 : 7 + r() * 12;
-    const hh = far ? 14 + r() * 46 : 26 + r() * 90;
-    const bY = B + r() * 6;
-    if (r() < 0.12) drawPine(g, x, bY - 2, far ? 10 + r() * 8 : 16 + r() * 18, r, 'pine', far ? 0.55 : 0.25);
-    else drawHoodoo(g, x, bY, hw, hh, r, bands, { cap: mix(CAP, '#c9b8d8', far ? 0.5 : 0.2), outline: far ? null : hexToRgb(mix('#6a3a36', '#c9b8d8', 0.35)) });
-    x += far ? 4 + r() * 9 : 9 + r() * 20;
-  }
-  // slope beneath the hoodoos
-  for (let xx = 0; xx < w; xx++) {
-    const top = Math.round(B + 2 + Math.sin(xx / 37) * 2 + Math.sin(xx / 13) * 1.2);
-    for (let y = top; y < LAYER_H; y += 1) {
-      g.fillStyle = bandColor(bands.base, y, Math.sin(xx / 23) * 2);
-      g.fillRect(xx, y, 1, 1);
-      if (y > top + 30) { g.fillStyle = baseCol; g.fillRect(xx, y, 1, LAYER_H - y); break; }
+  if (kind === 'far' || kind === 'mid') {
+    const far = kind === 'far';
+    const haze = far ? 0.45 : 0.14;
+    // slope behind
+    g.fillStyle = lin(g, 0, B - 10, 0, B + 60, [[0, mix('#d99474', HAZE, haze)], [1, mix('#b8644a', HAZE, haze * 0.8)]]);
+    g.fillRect(0, B, w, LAYER_H - B);
+    let x = 0;
+    while (x < w) {
+      if (r() < 0.12) paintPine(g, { x, base: B + 4, h: far ? 9 + r() * 7 : 16 + r() * 16, seed: (r() * 1e6) | 0, haze: haze + 0.1 });
+      else paintHoodoo(g, { x, base: B + 4 + r() * 6, w: far ? 3.5 + r() * 6 : 6 + r() * 12, h: far ? 12 + r() * 40 : 24 + r() * 80, seed: (r() * 1e6) | 0, haze, detail: far ? 1 : 2 });
+      x += far ? 2.5 + r() * 6 : 6 + r() * 16;
     }
+    // atmospheric fade at the base
+    g.fillStyle = lin(g, 0, B - 20, 0, B + 40, [[0, rgba(HAZE, 0)], [1, rgba(HAZE, far ? 0.6 : 0.35)]]);
+    g.fillRect(0, B - 20, w, LAYER_H - B + 20);
+    return c;
+  }
+  if (kind === 'cliffs') { // close canyon walls for grottos / slots
+    paintWall(g, { x0: 0, x1: w, top: B - 160, bottom: B + 40, seed: 5, color: '#a85638', taper: 0 });
+    return c;
   }
   return c;
 }
 
-// ---------- near layer (parallax 1) ----------
-function bakeNear() {
-  const H = YBOT - YTOP;
-  const c = canvas(WORLD_W, H), g = c.getContext('2d');
-  g.translate(0, -YTOP);
-  const r = rng(5);
-  const bands = makeBands(0);
-
-  // Pines behind the trail on the rim (gaps at the viewpoints)
-  const rimGap = x => (x > 320 && x < 490) || (x > 3740 && x < 3900);
-  for (let x = 10; x < WORLD_W; x += 14 + r() * 30) {
-    const onRim = x < 790 || x > 3720;
-    if (onRim && !rimGap(x)) drawPine(g, x, groundY(x) + 2, 30 + r() * 34, r);
+// soft foreground silhouettes (drawn after characters, slightly blurred)
+const fgCache = {};
+export function foregroundSprite(kind, seed) {
+  const key = kind + seed;
+  if (fgCache[key]) return fgCache[key];
+  const r = rng(seed);
+  const lw = 40, lh = 30, sc = 1.1;   // low resolution = natural blur when scaled up
+  const c = canvas(lw * sc, lh * sc), g = c.getContext('2d');
+  g.scale(sc, sc);
+  if (kind === 'bush') {
+    for (let i = 0; i < 9; i++) { g.fillStyle = r() < 0.5 ? '#2a3a26' : '#3a4a30'; ellipse(g, 20 + (r() - 0.5) * 26, 24 - r() * 12, 5 + r() * 6, 4 + r() * 4); g.fill(); }
+  } else if (kind === 'grass') {
+    g.strokeStyle = '#3a4a2a'; g.lineWidth = 0.9;
+    for (let i = 0; i < 26; i++) { const x = 4 + r() * 32; g.beginPath(); g.moveTo(x, 30); g.quadraticCurveTo(x + (r() - 0.5) * 6, 18, x + (r() - 0.5) * 10, 6 + r() * 10); g.stroke(); }
+  } else {
+    g.fillStyle = '#4a2e2a'; g.beginPath(); g.moveTo(2, 30); g.quadraticCurveTo(6, 10, 20, 8 + r() * 6); g.quadraticCurveTo(34, 10, 38, 30); g.fill();
   }
-
-  // Hoodoos behind the trail in the amphitheater
-  for (let x = 800; x < 3720; x += 18 + r() * 34) {
-    if (x > 2530 && x < 2990) continue; // Wall Street
-    const depth = (groundY(x) - 100) / 130; // 0 at rim, 1 at floor
-    if (depth < 0.08) continue;
-    if (r() < 0.14) { drawPine(g, x, groundY(x) + 4, 24 + r() * 30, r); continue; }
-    const h = 40 + depth * 90 + r() * 50;
-    drawHoodoo(g, x, groundY(x) + 30, 9 + r() * 16, h, r, bands);
-  }
-
-  // Queen Victoria hoodoo (Queen's Garden)
-  {
-    const x = 1730, b = groundY(x) + 10;
-    drawHoodoo(g, x, b, 22, 70, rng(1), bands, { capFrac: 0.05 });
-    // the "queen": a pale rounded figure perched on top
-    g.fillStyle = CAP;
-    for (let y = 0; y < 14; y++) {
-      const half = y < 6 ? 5 - y * 0.3 : 2.5 + Math.sin((y - 6) / 8 * Math.PI) * 1.8;
-      g.fillRect(Math.round(x - half), b - 70 - y, Math.round(half * 2), 1);
-    }
-    g.fillStyle = shade(CAP, -0.18);
-    for (let y = 0; y < 14; y++) g.fillRect(x + 1, b - 70 - y, 2, 1);
-  }
-
-  // Wall Street: towering back wall + Douglas firs reaching for light
-  {
-    const wallA = shade('#c8604a', -0.25), wallB = shade('#d9764f', -0.3), wallC = shade('#b8503c', -0.38);
-    for (let x = 2530; x < 2990; x++) {
-      const edge = Math.min(x - 2530, 2990 - x);
-      const top = YTOP + Math.max(0, 40 - edge) * 2 + Math.round(Math.sin(x / 9) * 2);
-      const gy = groundY(x) + 2;
-      for (let y = top; y < gy; y++) {
-        const n = Math.sin(x * 0.7 + y * 0.05) + Math.sin(x * 0.13);
-        g.fillStyle = n > 1.1 ? wallC : (Math.floor((y + 1000) / 9) % 3 === 0 ? wallB : wallA);
-        g.fillRect(x, y, 1, 1);
-      }
-    }
-    for (const fx of [2610, 2700, 2790, 2880, 2945]) drawPine(g, fx, groundY(fx) + 2, 140 + r() * 40, r, 'fir');
-  }
-
-  // Thor's Hammer
-  {
-    const x = 3565, b = groundY(x) + 70;
-    const colH = 118;
-    for (let y = 0; y < colH; y++) {
-      const half = 5 + Math.sin(y / 9) * 1.5 + (y < 20 ? (20 - y) * 0.4 : 0);
-      g.fillStyle = bandColor(bands.base, b - y, 0);
-      g.fillRect(Math.round(x - half), b - y, Math.round(half * 2), 1);
-      g.fillStyle = bands.dark[STRATA_INDEX(bands, bandColor(bands.base, b - y, 0))];
-      g.fillRect(Math.round(x + half * 0.3), b - y, Math.round(half * 0.7), 1);
-    }
-    // the hammer head
-    g.fillStyle = CAP; g.fillRect(x - 9, b - colH - 9, 18, 9);
-    g.fillStyle = shade(CAP, -0.2); g.fillRect(x + 3, b - colH - 9, 6, 9);
-    g.fillStyle = shade(CAP, 0.2); g.fillRect(x - 9, b - colH - 9, 18, 1);
-  }
-
-  // Terrain cross-section (ImageData for speed): cozy cliff face with grass/dirt lip
-  const tc = canvas(WORLD_W, H), tg = tc.getContext('2d');
-  const img = tg.createImageData(WORLD_W, H);
-  const d = img.data;
-  const rgbStrata = bands.base.map(hexToRgb);
-  const rgbDark = bands.dark.map(hexToRgb);
-  const rgbLight = bands.light.map(hexToRgb);
-  const C = c => hexToRgb(c);
-  const OUT = C('#4a2a26');
-  const grass = [C('#8fc25a'), C('#6aa04a'), C('#4f8040'), C('#b5dc78')];
-  const dirt = [C('#ecd2a6'), C('#d8b486'), C('#b98d62'), C('#f6e4c2')];
-  // vertical cracks in the cliff
-  const crack = new Uint8Array(WORLD_W);
-  for (let x = 0; x < WORLD_W; x += 9 + Math.floor(r() * 18)) crack[x] = 1;
-  const put = (x, y, col) => {
-    if (y < YTOP || y >= YBOT) return;
-    const idx = ((y - YTOP) * WORLD_W + x) * 4;
-    d[idx] = col[0]; d[idx + 1] = col[1]; d[idx + 2] = col[2]; d[idx + 3] = 255;
-  };
-  for (let x = 0; x < WORLD_W; x++) {
-    const gy = Math.round(groundY(x));
-    const onRim = x < 790 || x > 3720;
-    const top = onRim ? grass : dirt;
-    const jitter = Math.sin(x / 31) * 3 + Math.sin(x / 7) * 0.8;
-    // lip: outline, highlight, body, scalloped overhang
-    put(x, gy - 1, OUT);
-    put(x, gy, top[3]);
-    put(x, gy + 1, top[0]);
-    put(x, gy + 2, top[0]);
-    put(x, gy + 3, top[1]);
-    const drip = 4 + ((x >> 1) % 3 === 0 ? 1 : 0) + ((x * 13) % 7 === 0 ? 1 : 0);
-    for (let y = gy + 4; y < gy + drip; y++) put(x, y, top[1]);
-    put(x, gy + drip, top[2]);
-    put(x, gy + drip + 1, OUT);
-    for (let y = gy + drip + 2; y < YBOT; y++) {
-      const dy = y - gy;
-      const bi = Math.floor((y + 1000 + jitter) / 9) % rgbStrata.length;
-      let col = rgbStrata[bi];
-      const inBand = (y + 1000 + jitter) % 9;
-      if (inBand < 1) col = rgbLight[bi];
-      else if (inBand > 7) col = rgbDark[bi];
-      if (crack[x] && ((y + x) % 11) > 3) col = rgbDark[bi];
-      if (crack[x - 1] && ((y + x) % 11) > 3) col = rgbLight[bi];
-      if (dy < drip + 5) col = rgbDark[bi]; // shadow under the lip
-      const f = Math.max(0.72, 1 - (dy - 6) / 420);
-      put(x, y, [col[0] * f, col[1] * f, col[2] * f]);
-    }
-  }
-  tg.putImageData(img, 0, 0);
-  g.drawImage(tc, 0, YTOP);
-
-  // Pebbles, grass tufts and little flowers on the surface
-  for (let x = 0; x < WORLD_W; x += 3 + r() * 10) {
-    const gy = Math.round(groundY(x));
-    const onRim = x < 790 || x > 3720;
-    const xi = Math.round(x);
-    if (onRim && r() < 0.7) {
-      g.fillStyle = '#4f8040'; g.fillRect(xi, gy - 3, 1, 3); g.fillRect(xi + 2, gy - 2, 1, 2);
-      g.fillStyle = '#8fc25a'; g.fillRect(xi + 1, gy - 2, 1, 2);
-      if (r() < 0.12) { g.fillStyle = r() < 0.5 ? '#fff4c0' : '#f4b6c2'; g.fillRect(xi + 1, gy - 3, 1, 1); }
-    } else if (r() < 0.6) {
-      g.fillStyle = '#4a2a26'; g.fillRect(xi, gy - 1, 2, 1);
-      g.fillStyle = r() < 0.5 ? '#c9a07a' : '#f6e6d2'; g.fillRect(xi, gy - 2, 2, 1);
-    } else {
-      g.fillStyle = '#6f9a55'; g.fillRect(xi, gy - 2, 1, 2); g.fillRect(xi + 1, gy - 1, 1, 1);
-    }
-  }
-
-  // Wooden rail fences at the viewpoints
-  for (const [a, b] of [[330, 490], [3740, 3900]]) {
-    for (let x = a; x <= b; x++) {
-      const gy = Math.round(groundY(x));
-      g.fillStyle = '#4a2a26'; g.fillRect(x, gy - 11, 1, 1); g.fillRect(x, gy - 8, 1, 1); g.fillRect(x, gy - 6, 1, 1);
-      g.fillStyle = '#b07a42'; g.fillRect(x, gy - 10, 1, 1);
-      g.fillStyle = '#8a5a32'; g.fillRect(x, gy - 9, 1, 1);
-      g.fillStyle = '#b07a42'; g.fillRect(x, gy - 7, 1, 1);
-      if ((x - a) % 20 === 0) {
-        g.fillStyle = '#4a2a26'; g.fillRect(x - 1, gy - 14, 5, 14);
-        g.fillStyle = '#c08550'; g.fillRect(x, gy - 13, 3, 13);
-        g.fillStyle = '#7a4f2c'; g.fillRect(x + 2, gy - 13, 1, 13);
-      }
-    }
-  }
-  return c;
+  fgCache[key] = { c, w: lw, h: lh };
+  return fgCache[key];
 }
 
-export function buildWorld(viewW) {
-  return {
-    near: bakeNear(),
-    layers: LAYERS.map(def => ({ ...def, canvas: bakeLayer(def, viewW) })),
-    layerBase: LAYER_BASE,
-  };
-}
+// ------------------------------------------------------------------ current area (for entities)
+let CUR = null;
+export function setArea(a) { CUR = a; }
+export function currentArea() { return CUR; }
+export const groundY = x => CUR.groundY(x);

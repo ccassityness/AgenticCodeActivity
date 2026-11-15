@@ -1,5 +1,6 @@
 // Item definitions and the bag (inventory).
-import { SPR, toDataURL } from './sprites.js';
+import { drawItemShape } from './figures.js';
+import { snapshot } from './color.js';
 
 /**
  * cat: care | toy | snack | litter | nature | lost | keepsake
@@ -35,6 +36,7 @@ export const ITEMS = {
   whistle: { name: 'Ranger whistle', cat: 'lost', max: 1, desc: 'Official park-service issue.' },
   postcard: { name: 'Photo print', cat: 'keepsake', max: 3, desc: 'A print of you and your baby with the hoodoos glowing behind.' },
   badge: { name: 'Junior Ranger badge', cat: 'keepsake', max: 1, desc: 'Awarded for caring for Bryce Canyon.' },
+  diary: { name: 'Diary page', cat: 'story', max: 6, desc: 'A page from an old hiking diary.' },
   flowercrown: { name: 'Paper flower crown', cat: 'keepsake', max: 1, desc: 'Folded by a kid on the trail. Real flowers stay in the ground!' },
 };
 export const isItem = id => !!ITEMS[id];
@@ -43,7 +45,7 @@ export const NATURE = ['pinecone', 'bluefeather', 'blackfeather', 'stone', 'whit
 
 const iconCache = {};
 export function itemIcon(id) {
-  if (!iconCache[id]) iconCache[id] = toDataURL(SPR.items[id].r, 4);
+  if (!iconCache[id]) iconCache[id] = snapshot(12, 12, g => { g.translate(6, 6); drawItemShape(g, id, 10); }, 6);
   return iconCache[id];
 }
 

@@ -2,9 +2,10 @@
 import {
   drawHuman, drawManatee, drawAlligator, drawTurtle, drawHeron, drawEgret, drawIbis, drawAnhinga,
   drawOsprey, drawOtter, drawArmadillo, drawGar, drawFish, drawBarredOwl, shadowBlob, OPTIONS, randomLook,
-} from './figures.js?v=20261115b';
-import { groundY, WATER_Y, bottomY } from './world.js?v=20261115b';
-import { snapshot, lin, rng } from './color.js?v=20261115b';
+  drawAnole, drawSkink, drawWaterSnake, drawSoftshell, drawGopherTortoise,
+} from './figures.js?v=20261116a';
+import { groundY, WATER_Y, bottomY } from './world.js?v=20261116a';
+import { snapshot, lin, rng } from './color.js?v=20261116a';
 
 const pick = a => a[(Math.random() * a.length) | 0];
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -35,6 +36,7 @@ class Animal extends Entity {
   }
   watch(g) {
     this.watchT = 12;
+    g.track('watch', this.jid); g.track('see', this.jid, this);
     g.ui.say('label', () => this.head(), this.name, { dur: 6, cls: 'label' });
     if (this.sound) g.audio[this.sound]();
     g.ui.dialogue(this.name, this.facts, null, this.portrait());
@@ -43,7 +45,7 @@ class Animal extends Entity {
   actions(g) {
     return [
       { label: '👀 Watch quietly', primary: true, run: () => this.watch(g) },
-      { label: '👉 Show baby', run: () => { if (!g.baby.react('animal')) g.ui.say('parent', () => g.parentHead(), '(they\'re napping — maybe later)'); } },
+      { label: '👉 Show baby', run: () => { g.track('see', this.jid, this); if (g.baby.react('animal')) g.track('showBaby', this.jid); else g.ui.say('parent', () => g.parentHead(), '(they\'re napping — maybe later)'); } },
     ];
   }
   render() { }
@@ -57,9 +59,9 @@ class Animal extends Entity {
 
 export class Manatee extends Animal {
   constructor(o) {
-    super({ name: o.calf ? 'Manatee calf' : 'West Indian manatee', w: 30, h: 10, reach: 0, under: true, sound: 'manatee', pbox: [34, 14, 17, 7], ...o });
+    super({ name: o.calf ? 'Manatee calf' : 'West Indian manatee', jid: 'manatee', w: 30, h: 10, reach: 0, under: true, sound: 'manatee', pbox: [34, 14, 17, 7], ...o });
     this.home = this.x; this.depth = rand(116, 128); this.y = this.depth; this.vx = rand(1.5, 3.5) * this.dir;
-    this.breathT = rand(10, 40); this.surf = 0; this.scars = Math.random() < 0.6;
+    this.breathT = rand(10, 40); this.surf = 0; this.scars = Math.random() < 0.6; this.uid = Math.random().toString(36).slice(2);
     this.facts = o.calf ? [
       'Manatee calves stay with their mothers for one to two years, learning where the warm springs and best feeding spots are.',
       'A calf is born underwater and can swim to the surface for its first breath on its own within moments.',
@@ -99,7 +101,7 @@ export class Manatee extends Animal {
 }
 
 export class Gar extends Animal {
-  constructor(o) { super({ name: 'Longnose gar', w: 18, h: 4, reach: 0, under: true, pbox: [22, 6, 11, 3], ...o }); this.home = this.x; this.y = rand(108, 114);
+  constructor(o) { super({ name: 'Longnose gar', jid: 'gar', w: 18, h: 4, reach: 0, under: true, pbox: [22, 6, 11, 3], ...o }); this.home = this.x; this.y = rand(108, 114);
     this.facts = ['Longnose gar belong to an ancient family of fish that has barely changed in 100 million years.', 'They can gulp air at the surface, which helps them live in warm, low-oxygen water.'];
   }
   box() { return { x: this.x - 9, y: this.y - 2, w: 18, h: 4 }; }
@@ -109,7 +111,7 @@ export class Gar extends Animal {
 }
 
 export class FishSchool extends Animal {
-  constructor(o) { super({ name: 'Striped mullet', w: 20, h: 8, reach: 0, under: true, pbox: [16, 8, 8, 4], ...o }); this.home = this.x; this.y = rand(116, 126);
+  constructor(o) { super({ name: 'Striped mullet', jid: 'mullet', w: 20, h: 8, reach: 0, under: true, pbox: [16, 8, 8, 4], ...o }); this.home = this.x; this.y = rand(116, 126);
     this.fish = Array.from({ length: 7 }, () => ({ dx: rand(-9, 9), dy: rand(-3, 3), p: Math.random() * 6 }));
     this.jumpT = rand(8, 20); this.jump = null;
     this.facts = ['Mullet are famous for leaping clean out of the water — nobody is completely sure why!', 'They graze on algae and tiny bits of food on the spring bottom.'];
@@ -119,7 +121,7 @@ export class FishSchool extends Animal {
   update(dt, g) {
     this.t += dt; this.watchT -= dt; this.x = this.home + Math.sin(this.t * 0.2) * 30; this.dir = Math.cos(this.t * 0.2) > 0 ? 1 : -1;
     this.jumpT -= dt;
-    if (this.jumpT <= 0) { this.jumpT = rand(10, 24); this.jump = { t: 0, x: this.x }; if (Math.abs(g.player.x - this.x) < 160) { g.audio.splash(); setTimeout(() => g.baby.react('animal'), 500); } g.fx.ripple(this.x, WATER_Y); }
+    if (this.jumpT <= 0) { this.jumpT = rand(10, 24); this.jump = { t: 0, x: this.x }; if (Math.abs(g.player.x - this.x) < 160) { g.audio.splash(); g.track('mullet'); setTimeout(() => g.baby.react('animal'), 500); } g.fx.ripple(this.x, WATER_Y); }
     if (this.jump) { this.jump.t += dt; if (this.jump.t > 0.9) { this.jump = null; g.fx.ripple(this.x + 8, WATER_Y); } }
   }
   render(ctx, x, y, dir, t) { for (const f of this.fish) drawFish(ctx, x + f.dx + Math.sin(t + f.p) * 1.2, y + f.dy, dir, t + f.p); }
@@ -133,8 +135,9 @@ export class FishSchool extends Animal {
 
 export class Alligator extends Animal {
   constructor(o) {
-    super({ name: 'American alligator', w: 34, h: 5, reach: 46, sound: 'gator', pbox: [42, 8, 18, 6], dir: -1, ...o });
-    this.state = 'bask'; this.stateT = rand(30, 60); this.home = this.x;
+    super({ name: o.juvenile ? 'Young alligator' : 'American alligator', jid: o.juvenile ? 'juvgator' : 'gator', w: o.juvenile ? 18 : 34, h: 5, reach: 46, sound: 'gator', pbox: [42, 8, 18, 6], dir: -1, ...o });
+    this.state = o.swimOnly ? 'swim' : 'bask'; this.stateT = rand(30, 60); this.home = this.x;
+    if (o.juvenile) this.facts = ['Baby alligators wear bright yellow stripes for camouflage among sunlit reeds. They stay near their mother for a year or more.', 'Mother alligators are surprisingly caring — they guard the nest and carry hatchlings to the water in their mouths. Admire from a distance!'];
     this.y = WATER_Y - 0.3;
     this.facts = [
       'The American alligator is Florida\'s official state reptile. They can live 35 to 50 years in the wild.',
@@ -143,14 +146,20 @@ export class Alligator extends Animal {
   }
   update(dt, g) {
     this.t += dt; this.watchT -= dt; this.stateT -= dt;
+    if (this.juvenile) { this.y = WATER_Y - 1.6; return; }
     if (this.state === 'bask' && (this.stateT <= 0 || (g.player.moving && this.near(g, 30)))) { this.state = 'swim'; this.stateT = rand(20, 40); g.audio.splash(); g.fx.ripple(this.x, WATER_Y); }
     if (this.state === 'swim') {
       this.x += this.dir * 2.5 * dt;
-      if (Math.abs(this.x - this.home) > 120) this.dir = -this.dir;
-      if (this.stateT <= 0 && Math.abs(this.x - this.home) < 10) { this.state = 'bask'; this.stateT = rand(30, 60); }
+      if (Math.abs(this.x - this.home) > (this.range || 120)) this.dir = -this.dir;
+      if (!this.swimOnly && this.stateT <= 0 && Math.abs(this.x - this.home) < 10) { this.state = 'bask'; this.stateT = rand(30, 60); }
     }
   }
   render(ctx, x, y, dir, t) {
+    if (this.juvenile) {
+      ctx.fillStyle = lin(ctx, 0, y - 1, 0, y + 2, [[0, '#6a5a46'], [1, '#3a2e24']]); ctx.beginPath(); ctx.roundRect(x - 12, y - 0.2, 24, 2.6, 1.3); ctx.fill();
+      ctx.save(); ctx.translate(x, y); ctx.scale(0.5, 0.5); drawAlligator(ctx, 0, 0, dir, t, { juvenile: true }); ctx.restore();
+      return;
+    }
     if (this.state === 'swim') {
       ctx.save(); ctx.beginPath(); ctx.rect(x - 30, y - 10, 60, 10.6); ctx.clip();
       drawAlligator(ctx, x, y + 2.2, dir, t, { submerged: true }); ctx.restore();
@@ -160,7 +169,7 @@ export class Alligator extends Animal {
 }
 
 export class Turtles extends Animal {
-  constructor(o) { super({ name: 'Florida red-bellied cooters', w: 26, h: 5, reach: 30, sound: 'splash', pbox: [16, 6, 8, 5], ...o }); this.y = WATER_Y - 1; this.hidden = 0;
+  constructor(o) { super({ name: 'Florida red-bellied cooters', jid: 'cooter', w: 26, h: 5, reach: 30, sound: 'splash', pbox: [16, 6, 8, 5], ...o }); this.y = WATER_Y - 1; this.hidden = 0;
     this.facts = ['These turtles line up on logs to bask. Sunshine warms them and helps keep their shells healthy.', 'If you hear a "plop!" as you walk by — that\'s a turtle diving to safety.'];
   }
   update(dt, g) {
@@ -178,7 +187,7 @@ export class Wader extends Animal {
       egret: ['Great egret', ['Great egrets were nearly wiped out a century ago, hunted for their lacy breeding plumes. Protecting them helped start the bird conservation movement.', 'Now they\'re a common, elegant sight along Florida waters.'], drawEgret],
       ibis: ['White ibis', ['White ibises probe the mud with their long, curved bills, feeling for crayfish and insects.', 'They often travel in groups — look for a little flock of them on the lawn.'], drawIbis],
     }[o.species];
-    super({ name: info[0], w: 10, h: 26, reach: 34, sound: 'heron', pbox: [20, 30, 7, 29], ...o });
+    super({ name: info[0], jid: o.species, w: 10, h: 26, reach: 34, sound: 'heron', pbox: [20, 30, 7, 29], ...o });
     this.facts = info[1]; this.fn = info[2]; this.home = this.x; this.state = 'stand'; this.stateT = rand(2, 6);
   }
   update(dt, g) {
@@ -191,7 +200,7 @@ export class Wader extends Animal {
 }
 
 export class Anhinga extends Animal {
-  constructor(o) { super({ name: 'Anhinga', w: 14, h: 12, reach: 34, pbox: [20, 14, 10, 13], dir: 1, ...o });
+  constructor(o) { super({ name: 'Anhinga', jid: 'anhinga', w: 14, h: 12, reach: 34, pbox: [20, 14, 10, 13], dir: 1, ...o });
     this.facts = ['Anhingas swim with just their snaky neck above water — that\'s why people call them "snakebirds."', 'Their feathers aren\'t waterproof, so after fishing they perch with wings spread wide to dry in the sun.'];
   }
   update(dt) { this.t += dt; this.watchT -= dt; }
@@ -199,7 +208,7 @@ export class Anhinga extends Animal {
 }
 
 export class Osprey extends Animal {
-  constructor(o) { super({ name: 'Osprey', w: 16, h: 12, reach: 0, sound: 'osprey', pbox: [20, 14, 10, 7], ...o }); this.ax = this.x;
+  constructor(o) { super({ name: 'Osprey', jid: 'osprey', w: 16, h: 12, reach: 0, sound: 'osprey', pbox: [20, 14, 10, 7], ...o }); this.ax = this.x;
     this.facts = ['Ospreys eat almost nothing but fish. They plunge feet-first into the water to grab them.', 'They carry fish head-first, like a torpedo, to cut through the wind.'];
   }
   visible(g) { return !g.sky.night; }
@@ -211,7 +220,7 @@ export class Osprey extends Animal {
 }
 
 export class Otter extends Animal {
-  constructor(o) { super({ name: 'River otter', w: 14, h: 4, reach: 0, pbox: [16, 7, 7, 5], ...o }); this.home = this.x; this.y = WATER_Y;
+  constructor(o) { super({ name: 'River otter', jid: 'otter', w: 14, h: 4, reach: 0, pbox: [16, 7, 7, 5], ...o }); this.home = this.x; this.y = WATER_Y;
     this.facts = ['River otters close their ears and nostrils when they dive, and use their whiskers to feel for fish in murky water.', 'They\'re playful — sliding, wrestling and tumbling, even as adults.'];
     this.diveT = rand(4, 9); this.under = false;
   }
@@ -227,7 +236,7 @@ export class Otter extends Animal {
 }
 
 export class Armadillo extends Animal {
-  constructor(o) { super({ name: 'Nine-banded armadillo', w: 12, h: 5, reach: 26, pbox: [16, 8, 7, 7], ...o }); this.home = this.x;
+  constructor(o) { super({ name: 'Nine-banded armadillo', jid: 'armadillo', w: 12, h: 5, reach: 26, pbox: [16, 8, 7, 7], ...o }); this.home = this.x;
     this.facts = ['Armadillos almost always give birth to identical quadruplets!', 'They snuffle through leaf litter with their long noses, hunting for insects and grubs.'];
   }
   update(dt, g) { this.t += dt; this.watchT -= dt; this.walking = Math.sin(this.t * 0.4) > 0; if (this.walking) { this.x += this.dir * 4 * dt; if (Math.abs(this.x - this.home) > 40) this.dir = -this.dir; } if (g.player.moving && this.near(g, 14)) { this.dir = this.x > g.player.x ? 1 : -1; this.x += this.dir * 20 * dt; } this.y = groundY(this.x); }
@@ -235,13 +244,55 @@ export class Armadillo extends Animal {
 }
 
 export class Owl extends Animal {
-  constructor(o) { super({ name: 'Barred owl', w: 8, h: 10, reach: 0, sound: 'owl', pbox: [10, 12, 5, 11.5], ...o }); this.hootT = rand(4, 10);
+  constructor(o) { super({ name: 'Barred owl', jid: 'owl', w: 8, h: 10, reach: 0, sound: 'owl', pbox: [10, 12, 5, 11.5], ...o }); this.hootT = rand(4, 10);
     this.facts = ['Listen for the barred owl\'s call: "Who cooks for you? Who cooks for you-all?"', 'They love old oak hammocks near water, like the woods around Blue Spring.'];
   }
   visible(g) { return g.sky.night || g.sky.dusk; }
   approachX() { return this.x; }
-  update(dt, g) { this.t += dt; this.hootT -= dt; if (this.hootT <= 0) { this.hootT = rand(14, 26); if (Math.abs(g.player.x - this.x) < 220) { g.audio.owl(); g.ui.say('owl', () => this.head(), 'who-cooks-for-you…', { dur: 2.4, cls: 'label' }); } } }
+  update(dt, g) { this.t += dt; this.hootT -= dt; if (this.hootT <= 0) { this.hootT = rand(14, 26); if (Math.abs(g.player.x - this.x) < 220) { g.audio.owl(); g.track('see', 'owl', this); g.ui.say('owl', () => this.head(), 'who-cooks-for-you…', { dur: 2.4, cls: 'label' }); } } }
   render(ctx, x, y, dir, t) { drawBarredOwl(ctx, x, y, t); }
+}
+
+export class Anole extends Animal {
+  constructor(o) { super({ name: 'Green anole', jid: 'anole', w: 6, h: 8, reach: 20, pbox: [12, 10, 6, 9], ...o }); this.dew = 0; this.dewT = rand(3, 8); this.climb = 0;
+    this.facts = ['Green anoles are Florida\'s native "chameleons" — they can shift from bright green to brown depending on mood and temperature.', 'Males flash a pink throat fan called a dewlap to show off and defend their patch of railing.'];
+  }
+  update(dt, g) { this.t += dt; this.watchT -= dt; this.dewT -= dt; if (this.dewT <= 0) { this.dewT = rand(4, 9); this.dewOn = 1.6; if (this.near(g, 60)) g.track('dewlap'); } if (this.dewOn > 0) { this.dewOn -= dt; this.dew = Math.min(1, this.dew + dt * 4); } else this.dew = Math.max(0, this.dew - dt * 3);
+    this.climb = Math.sin(this.t * 0.3) * 2; }
+  render(ctx, x, y, dir, t) { drawAnole(ctx, x, y - 4 + this.climb, dir, t, this.dew); }
+}
+export class Skink extends Animal {
+  constructor(o) { super({ name: 'Five-lined skink', jid: 'skink', w: 10, h: 4, reach: 22, pbox: [14, 5, 6, 4], ...o }); this.home = this.x; this.run = 0;
+    this.facts = ['Young five-lined skinks have bright blue tails. If a predator grabs the tail, it breaks off and wiggles while the skink escapes — then grows back!', 'They hunt insects and spiders among fallen logs and leaf litter.'];
+  }
+  visible(g) { return !g.sky.night; }
+  update(dt, g) { this.t += dt; this.watchT -= dt; if (this.run <= 0 && g.player.moving && this.near(g, 16)) { this.run = 0.7; this.dir = this.x > g.player.x ? 1 : -1; } if (this.run > 0) { this.run -= dt; this.x += this.dir * 40 * dt; } else if (Math.abs(this.x - this.home) > 30) this.x += Math.sign(this.home - this.x) * 5 * dt; this.y = groundY(this.x); }
+  render(ctx, x, y, dir, t) { drawSkink(ctx, x, y, dir, t); }
+}
+export class WaterSnake extends Animal {
+  constructor(o) { super({ name: 'Banded water snake', jid: 'snake', w: 16, h: 4, reach: 32, pbox: [18, 6, 9, 5], ...o }); this.y = WATER_Y - 0.6;
+    this.facts = ['Banded water snakes are harmless, non-venomous snakes that hunt fish and frogs along the water\'s edge.', 'People often mistake them for cottonmouths. Either way, the rule is the same: give snakes space and let them be.'];
+  }
+  visible(g) { return !g.sky.night; }
+  update(dt) { this.t += dt; this.watchT -= dt; }
+  render(ctx, x, y, dir, t) { drawWaterSnake(ctx, x, y, dir, t); }
+}
+export class Softshell extends Animal {
+  constructor(o) { super({ name: 'Florida softshell turtle', jid: 'softshell', w: 12, h: 4, reach: 0, under: true, pbox: [16, 6, 7, 3], ...o }); this.home = this.x; this.y = 128;
+    this.facts = ['Florida softshells have flat, leathery shells instead of hard scutes — like a swimming pancake!', 'Their long snorkel nose lets them breathe while hiding buried in the sandy bottom.'];
+  }
+  box() { return { x: this.x - 6, y: this.y - 2, w: 12, h: 4 }; }
+  approachX() { return this.x; }
+  update(dt) { this.t += dt; this.watchT -= dt; this.x = this.home + Math.sin(this.t * 0.12) * 60; this.dir = Math.cos(this.t * 0.12) > 0 ? 1 : -1; this.y = Math.min(130 + Math.sin(this.t * 0.4) * 3, bottomY(this.x) - 2); }
+  render(ctx, x, y, dir, t) { drawSoftshell(ctx, x, y, dir, t); }
+}
+export class Tortoise extends Animal {
+  constructor(o) { super({ name: 'Gopher tortoise', jid: 'tortoise', w: 9, h: 5, reach: 22, pbox: [24, 8, 16, 7], ...o }); this.home = this.x;
+    this.facts = ['Gopher tortoises dig burrows up to 40 feet long. More than 350 other kinds of animals use those burrows for shelter!', 'They\'re a threatened species in Florida, living in dry, sandy uplands like the ridge above the spring.'];
+  }
+  visible(g) { return !g.sky.night; }
+  update(dt) { this.t += dt; this.watchT -= dt; this.walking = Math.sin(this.t * 0.2) > 0.3; if (this.walking) { this.x += this.dir * 1.5 * dt; if (Math.abs(this.x - this.home) > 18) this.dir = -this.dir; } this.y = groundY(this.x); }
+  render(ctx, x, y, dir, t) { drawGopherTortoise(ctx, x, y, dir, t, this.walking); }
 }
 
 // ======================= PEOPLE =======================
@@ -269,8 +320,8 @@ export class Person extends Entity {
     return l;
   }
   actions(g) {
-    const acts = [{ label: '💬 Chat', primary: true, run: () => this.talk(g, [this.line()]) }];
-    for (const tp of this.topics || []) acts.push({ label: tp.label, run: () => this.talk(g, tp.pages) });
+    const acts = [{ label: '💬 Chat', primary: true, run: () => { this.talk(g, [this.line()]); g.track('chat', this.name); } }];
+    for (const tp of this.topics || []) acts.push({ label: tp.label, run: () => { this.talk(g, tp.pages); g.track('topic', this.name); } });
     acts.push({ label: '👋 Wave', run: () => { g.ui.say('npc' + this.name, () => this.head(), pick(['*waves back*', 'Hi, little one!', 'Enjoy the springs!'])); g.baby.react('person'); } });
     return acts;
   }
@@ -329,7 +380,7 @@ function blit(ctx, key, w, h, x, y, draw) {
 export class Sign extends Entity {
   constructor(o) { super({ w: 14, h: 17, kind: 'sign', name: o.title, ...o }); }
   actions(g) {
-    const acts = [{ label: '📖 Read', primary: true, run: () => g.ui.dialogue(this.title, this.text, null, snapshot(16, 18, c => { c.translate(8, 18); paintSign(c); }, 4)) }];
+    const acts = [{ label: '📖 Read', primary: true, run: () => { g.track('sign', this.title); g.ui.dialogue(this.title, this.text, null, snapshot(16, 18, c => { c.translate(8, 18); paintSign(c); }, 4)); } }];
     if (this.view) acts.push({ label: '🌿 Take in the view', run: () => { g.ui.say('parent', () => g.parentHead(), pick(['Look at that water, little one.', 'So clear…', 'Beautiful.'])); setTimeout(() => g.baby.react('view'), 900); g.audio.chime(); } });
     return acts;
   }
@@ -346,7 +397,7 @@ export class Bench extends Entity {
   approachX() { return this.x; }
   actions(g) {
     if (this.occupied) return [{ label: '🙂 Say hello', run: () => g.ui.say('parent', () => g.parentHead(), 'Lovely spot!') }];
-    return [{ label: '🪑 Sit & rest', primary: true, run: () => g.sitOn(this) }];
+    return [{ label: '🪑 Sit & rest', primary: true, run: () => { g.track('bench', this.x); g.sitOn(this); } }];
   }
   draw(ctx, g, ox, oy) { shadowBlob(ctx, this.x - ox, this.y - oy, 10, 0.22); blit(ctx, 'bench', 20, 13, this.x - ox, this.y - oy + 0.3, paintBench); }
 }

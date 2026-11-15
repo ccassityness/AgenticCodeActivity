@@ -1,6 +1,6 @@
 // DOM UI over the canvas: speech bubbles, the baby's thought bubble, menus, dialogue, toast,
 // notifications, clock and photo album.
-import { NEEDS } from './baby.js?v=20261115b';
+import { NEEDS } from './baby.js?v=20261116a';
 
 const $ = id => document.getElementById(id);
 
@@ -15,10 +15,25 @@ export class UI {
     $('menuClose').addEventListener('click', () => this.closeMenu());
     $('menuBack').addEventListener('click', () => { if (this.menuBackFn) this.menuBackFn(); });
     this.dlgEl.addEventListener('pointerdown', e => { e.stopPropagation(); if (!e.target.closest('#dlgChoices')) this.advance(); });
-    for (const el of [this.menuEl, $('hud'), $('album'), $('custom')]) el.addEventListener('pointerdown', e => e.stopPropagation());
+    for (const el of [this.menuEl, $('hud'), $('album'), $('custom'), $('tasks'), $('guide')]) el.addEventListener('pointerdown', e => e.stopPropagation());
+    for (const id of ['tasks', 'guide']) { $(id + 'Close').onclick = () => { $(id).hidden = true; }; $(id).addEventListener('click', e => { if (e.target.id === id) $(id).hidden = true; }); }
+    document.querySelectorAll('#guideTabs button').forEach(b => b.addEventListener('click', () => this.openGuide(b.dataset.tab)));
   }
   get busy() { return !this.menuEl.hidden || !this.dlgEl.hidden || this.panelOpen; }
-  get panelOpen() { return !$('album').hidden || !$('custom').hidden; }
+  get panelOpen() { return !$('album').hidden || !$('custom').hidden || !$('tasks').hidden || !$('guide').hidden; }
+
+  openTasks() { this.closeMenu(); this.g.progress.renderTasks($('tasksBody')); $('tasks').hidden = false; }
+  openGuide(tab = this.guideTab || 'animals') {
+    this.closeMenu(); this.guideTab = tab;
+    document.querySelectorAll('#guideTabs button').forEach(b => b.classList.toggle('sel', b.dataset.tab === tab));
+    this.g.progress.renderGuide($('guideBody'), tab, id => this.g.guidePortrait(id));
+    $('guide').hidden = false;
+  }
+  refreshTasks() {
+    const p = this.g.progress; if (!p) return;
+    $('taskChip').textContent = `📋 ${p.doneCount}/${p.tasks.length}`;
+    if (!$('tasks').hidden) p.renderTasks($('tasksBody'));
+  }
 
   // ----- speech bubbles -----
   bubble(anchor, text, { dur = 2.4, cls = '' } = {}) {

@@ -1,6 +1,6 @@
 // The parent: tap-to-walk (or arrow keys) along the path and boardwalk.
-import { drawHuman } from './figures.js?v=20261115b';
-import { groundY, WORLD_W } from './world.js?v=20261115b';
+import { drawHuman } from './figures.js?v=20261116a';
+import { groundY, WORLD_W } from './world.js?v=20261116a';
 
 export class Player {
   constructor(game, look) {

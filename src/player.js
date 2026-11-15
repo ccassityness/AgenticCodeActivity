@@ -1,5 +1,5 @@
 // The parent: tap-to-walk movement along the trail, plus a few action poses.
-import { drawSprite } from './sprites.js';
+import { drawSprite, SPR } from './sprites.js';
 import { groundY, WORLD_W } from './world.js';
 
 export class Player {
@@ -10,11 +10,11 @@ export class Player {
     this.x = 110;
     this.y = groundY(this.x);
     this.dir = 1;
-    this.speed = 38;
+    this.speed = 40;
     this.target = null;
     this.onArrive = null;
     this.keyDir = 0;
-    this.state = 'idle';   // idle | walk | sit | rock | feed
+    this.state = 'idle';   // idle | walk | sit | rock | feed | bounce
     this.actT = 0;
     this.walkT = 0;
     this.moving = false;
@@ -51,20 +51,22 @@ export class Player {
   update(dt) {
     this.actT -= dt;
     if (this.state === 'sit') { if (this.actT <= 0) this.sitAct = null; return; }
-    if ((this.state === 'rock' || this.state === 'feed') && this.actT > 0 && !this.keyDir && this.target == null) return;
-    if (this.state === 'rock' || this.state === 'feed') this.state = 'idle';
+    const acting = ['rock', 'feed', 'bounce'].includes(this.state);
+    if (acting && this.actT > 0 && !this.keyDir && this.target == null) return;
+    if (acting) this.state = 'idle';
 
     const mv = this.keyDir || (this.target != null ? Math.sign(this.target - this.x) : 0);
     this.moving = false;
     if (mv) {
       const slope = (groundY(this.x + mv * 3) - groundY(this.x)) / 3; // >0 downhill
-      const sp = this.speed * Math.max(0.65, slope < 0 ? 1 + slope * 0.9 : 1);
+      this.speedBoost = (this.speedBoost || 0) - dt;
+      const sp = this.speed * (this.speedBoost > 0 ? 1.3 : 1) * Math.max(0.65, slope < 0 ? 1 + slope * 0.9 : 1);
       this.x += mv * sp * dt;
       this.dir = mv;
       this.moving = true;
       this.state = 'walk';
       const before = Math.floor(this.walkT);
-      this.walkT += dt * 7 * (sp / this.speed);
+      this.walkT += dt * 7 * Math.min(1.3, sp / this.speed);
       if (Math.floor(this.walkT) !== before && Math.floor(this.walkT) % 2 === 0) this.g.audio.step();
       if (this.target != null && Math.sign(this.target - this.x) !== mv) {
         this.x = this.target;
@@ -81,12 +83,12 @@ export class Player {
     this.y = groundY(this.x);
   }
 
-  /** Where the baby's head is in world space. */
+  /** Baby head position in world space (for bubbles). */
   babyAnchor() {
     const sit = this.state === 'sit' ? 3 : 0;
-    const top = this.y + sit - 25;
-    if (this.g.baby.carrier === 'front') return { x: this.x + this.dir * 4, y: top + 9 };
-    return { x: this.x - this.dir * 6, y: top + 5 };
+    const top = this.y + sit - 29;
+    if (this.g.baby.carrier === 'front') return { x: this.x + this.dir * 4, y: top + 11 };
+    return { x: this.x - this.dir * 7, y: top + 7 };
   }
 
   draw(ctx, ox, oy) {
@@ -100,32 +102,36 @@ export class Player {
       spr = f.sit;
     } else if (this.state === 'rock' || this.sitAct === 'rock') {
       dx = Math.round(Math.sin(this.g.now * 5));
+    } else if (this.state === 'bounce') {
+      bob = -Math.round(Math.abs(Math.sin(this.g.now * 9)) * 2);
     } else {
       bob = Math.sin(this.g.now * 2) > 0.7 ? -1 : 0; // gentle breathing
     }
     const sitOff = this.state === 'sit' ? 3 : 0;
     const x = Math.round(this.x - ox) + dx;
     const y = Math.round(this.y - oy) + bob + sitOff;
-    const left = x - 7, top = y - spr.h;
+    const sx = x - Math.round(spr.w / 2), sy = y - spr.h + spr.pad;
     const baby = this.g.baby;
-    const bspr = this.babyFrames[baby.face];
-    const bbob = baby.giggleT > 0 ? Math.round(Math.abs(Math.sin(this.g.now * 14))) * -1 : 0;
+    const bspr = this.babyFrames[baby.face] || this.babyFrames.content;
+    const bbob = baby.giggleT > 0 ? -Math.round(Math.abs(Math.sin(this.g.now * 14))) : 0;
+    const right = this.dir > 0;
 
-    if (baby.carrier === 'back') {
-      const bx = this.dir > 0 ? left - 3 : left + 14 + 3 - 8;
-      ctx.drawImage(this.dir > 0 ? bspr.r : bspr.l, bx, top + 5 + bbob);
-    }
+    const drawBaby = (bx, by) => {
+      ctx.drawImage(right ? bspr.r : bspr.l, bx, by);
+      if (baby.wearing.blanket) ctx.drawImage(SPR.babyBlanket.r, bx + 1, by + 7);
+      if (baby.wearing.hat) ctx.drawImage(SPR.babyHat.r, bx + 1, by - 1);
+      if (baby.napping && baby.wearing.pacifier) ctx.drawImage(SPR.babyPacifier.r, bx + 5, by + 7);
+    };
+
+    if (baby.carrier === 'back') drawBaby(right ? sx - 4 : sx + spr.w + 4 - 12, sy + 6 + bbob);
     drawSprite(ctx, spr, x, y, this.dir);
     if (baby.carrier === 'front') {
-      const bx = this.dir > 0 ? left + 7 : left + 14 - 7 - 8;
-      ctx.drawImage(this.dir > 0 ? bspr.r : bspr.l, bx, top + 9 + bbob);
-      if (baby.feedT > 0) {
-        const b = this.g.sprites.bottle;
-        ctx.drawImage(b.r, this.dir > 0 ? bx + 7 : bx - 2, top + 13);
-      }
+      const bx = right ? sx + 6 : sx + spr.w - 6 - 12;
+      const by = sy + 11 + bbob;
+      drawBaby(bx, by);
+      if (baby.feedT > 0) ctx.drawImage(SPR.bottle.r, right ? bx + 9 : bx - 2, by + 7);
     } else if (baby.feedT > 0) {
-      const b = this.g.sprites.bottle;
-      ctx.drawImage(b.r, this.dir > 0 ? left - 4 : left + 15, top + 10);
+      ctx.drawImage(SPR.bottle.r, right ? sx - 5 : sx + spr.w, sy + 12);
     }
   }
 }

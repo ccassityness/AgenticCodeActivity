@@ -28,13 +28,19 @@ export function setupInput(game, canvas) {
     if (e.repeat) return;
     if (k === ' ' || k === 'Enter' || k === 'e' || k === 'E') {
       e.preventDefault();
+      if (game.ui.panelOpen) return;
       if (game.ui.dlg) game.ui.advance();
       else if (!game.ui.menuEl.hidden) game.ui.menuEl.querySelector('#menuActions button')?.click();
       else game.interactNearest();
     } else if (k === 'b' || k === 'B') game.openBabyMenu();
+    else if (k === 'i' || k === 'I') game.ui.openBag();
+    else if (k === 'j' || k === 'J') game.ui.openJournal();
     else if (k === 'p' || k === 'P') game.takePhoto();
     else if (k === 'm' || k === 'M') game.toggleMute();
-    else if (k === 'Escape') { game.ui.closeMenu(); game.ui.closeDialogue(false); }
+    else if (k === 'Escape') {
+      game.ui.closeMenu(); game.ui.closeDialogue(false); game.ui.closeBag();
+      for (const id of ['journal', 'album']) document.getElementById(id).hidden = true;
+    }
   });
   window.addEventListener('keyup', e => { held.delete(e.key); updateDir(); });
   window.addEventListener('blur', () => { held.clear(); updateDir(); });

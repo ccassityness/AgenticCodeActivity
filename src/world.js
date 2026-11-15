@@ -66,39 +66,70 @@ function bandColor(bands, y, jitter) {
   return bands[i];
 }
 
-/** A single hoodoo: stacked bulges and necks with a pale cap rock. */
+// ---------- outlined "stamps": draw into a temp canvas, outline, then blit ----------
+const OUTLINE_RGB = hexToRgb('#4a2a26');
+export function outlineCanvas(c, rgb = OUTLINE_RGB, alpha = 255) {
+  const g = c.getContext('2d');
+  const img = g.getImageData(0, 0, c.width, c.height);
+  const d = img.data, W = c.width, H = c.height;
+  const op = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) op[i] = d[i * 4 + 3] > 0 ? 1 : 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (op[i]) continue;
+    if ((x > 0 && op[i - 1]) || (x < W - 1 && op[i + 1]) || (y > 0 && op[i - W]) || (y < H - 1 && op[i + W])) {
+      d[i * 4] = rgb[0]; d[i * 4 + 1] = rgb[1]; d[i * 4 + 2] = rgb[2]; d[i * 4 + 3] = alpha;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+function stamp(g, cx, baseY, w, h, paint, outline) {
+  const tw = Math.ceil(w) + 8, th = Math.ceil(h) + 6;
+  const c = canvas(tw, th), tg = c.getContext('2d');
+  const ox = Math.round(tw / 2), oy = th - 3;
+  paint(tg, ox, oy);
+  if (outline) outlineCanvas(c, outline);
+  g.drawImage(c, Math.round(cx) - ox, Math.round(baseY) - oy);
+}
+
+/** A single hoodoo: stacked bulges and necks with a pale cap rock, 3-tone shaded and outlined. */
 function drawHoodoo(g, cx, baseY, w, h, r, bands, opts = {}) {
   const k = 2.2 + r() * 3.2, ph = r() * 6.28;
   const capH = Math.max(3, Math.round(h * (opts.capFrac ?? 0.1)));
   const neckH = Math.max(2, Math.round(h * 0.05));
   const capCol = opts.cap ?? CAP;
-  const capShade = shade(capCol, -0.18);
-  for (let y = 0; y < h; y++) {
-    const ty = y / h;
-    let half, col;
-    if (y >= h - capH) {
-      const cy = (y - (h - capH)) / capH;
-      half = w * (opts.capW ?? 0.42) * Math.sqrt(Math.max(0.05, 1 - cy * cy * 0.85));
-      col = capCol;
-    } else if (y >= h - capH - neckH) {
-      half = w * 0.2;
-      col = bandColor(bands.base, baseY - y, 0);
-    } else {
-      half = w * 0.5 * (1 - 0.45 * ty) * (0.74 + 0.26 * Math.sin(ty * k * Math.PI + ph));
-      col = bandColor(bands.base, baseY - y, 0);
+  const capShade = shade(capCol, -0.16), capLight = shade(capCol, 0.35);
+  const outline = opts.outline === undefined ? OUTLINE_RGB : opts.outline;
+  stamp(g, cx, baseY, w + 2, h, (tg, ox, oy) => {
+    for (let y = 0; y < h; y++) {
+      const ty = y / h;
+      let half, col;
+      const isCap = y >= h - capH;
+      if (isCap) {
+        const cy = (y - (h - capH)) / capH;
+        half = w * (opts.capW ?? 0.42) * Math.sqrt(Math.max(0.05, 1 - cy * cy * 0.85));
+        col = capCol;
+      } else if (y >= h - capH - neckH) {
+        half = w * 0.2;
+        col = bandColor(bands.base, baseY - y, 0);
+      } else {
+        half = w * 0.5 * (1 - 0.45 * ty) * (0.74 + 0.26 * Math.sin(ty * k * Math.PI + ph));
+        col = bandColor(bands.base, baseY - y, 0);
+      }
+      half = Math.max(1, half);
+      const wy = oy - y;
+      const x0 = Math.round(ox - half), ww = Math.max(1, Math.round(half * 2));
+      const i = STRATA_INDEX(bands, col);
+      tg.fillStyle = col; tg.fillRect(x0, wy, ww, 1);
+      const sw = Math.max(1, Math.round(ww * 0.3));
+      tg.fillStyle = isCap ? capShade : bands.dark[i]; tg.fillRect(x0 + ww - sw, wy, sw, 1);
+      const lw = Math.max(1, Math.round(ww * 0.22));
+      if (ww > 2) { tg.fillStyle = isCap ? capLight : bands.light[i]; tg.fillRect(x0, wy, lw, 1); }
+      // little pits and cracks
+      if (!isCap && ww > 5 && ((y * 7 + x0 * 3) % 23) === 0) { tg.fillStyle = bands.dark[i]; tg.fillRect(x0 + lw + 1, wy, 1, 1); }
     }
-    half = Math.max(1, half);
-    const wy = Math.round(baseY - y);
-    const x0 = Math.round(cx - half), ww = Math.max(1, Math.round(half * 2));
-    g.fillStyle = col;
-    g.fillRect(x0, wy, ww, 1);
-    // shadow side
-    g.fillStyle = y >= h - capH ? capShade : bands.dark[STRATA_INDEX(bands, col)];
-    const sw = Math.max(1, Math.round(ww * 0.32));
-    g.fillRect(x0 + ww - sw, wy, sw, 1);
-    // lit edge
-    if (ww > 3) { g.fillStyle = bands.light[STRATA_INDEX(bands, col)] ?? capCol; g.fillRect(x0, wy, 1, 1); }
-  }
+  }, outline);
 }
 function STRATA_INDEX(bands, col) {
   const i = bands.base.indexOf(col);
@@ -106,32 +137,48 @@ function STRATA_INDEX(bands, col) {
 }
 function makeBands(haze = 0, hazeCol = '#c9b8d8') {
   // soften the stripes a little toward a warm mid-tone so hoodoos don't look like candy canes
-  const base = STRATA.map(c => mix(mix(c, '#e09a7a', 0.3), hazeCol, haze));
-  return { base, dark: base.map(c => shade(c, -0.2)), light: base.map(c => shade(c, 0.18)) };
+  const base = STRATA.map(c => mix(mix(c, '#e8a07a', 0.32), hazeCol, haze));
+  return { base, dark: base.map(c => shade(c, -0.18)), light: base.map(c => shade(c, 0.2)) };
 }
 
-/** Ponderosa pine / fir */
-function drawPine(g, x, baseY, h, r, kind = 'pine', haze = 0) {
+/** Tiered, scalloped conifer (ponderosa pine or Douglas fir), outlined. */
+function drawPine(g, x, baseY, h, r, kind = 'pine', haze = 0, outline) {
   const hz = c => mix(c, '#c9b8d8', haze);
-  const trunk = hz(kind === 'fir' ? '#5e3d2a' : '#8a4b2a');
-  const dark = hz(kind === 'fir' ? '#23402f' : '#2f5d3a');
-  const mid = hz(kind === 'fir' ? '#2f5a3e' : '#3f7a4a');
-  g.fillStyle = trunk;
-  g.fillRect(Math.round(x) - 1, Math.round(baseY - h), 2, Math.round(h));
-  const crownStart = kind === 'fir' ? 0.18 : 0.38;
-  for (let y = Math.round(h * crownStart); y < h; y++) {
-    const ty = (y - h * crownStart) / (h * (1 - crownStart));
-    let half = kind === 'fir'
-      ? (1 - ty) * h * 0.2 + 1
-      : (Math.sin(ty * Math.PI) * 0.6 + (1 - ty) * 0.4) * h * 0.17 + 1;
-    half *= 0.8 + 0.4 * r();
-    if (kind !== 'fir' && r() < 0.18) continue; // gaps between tufts
-    const wy = Math.round(baseY - y);
-    g.fillStyle = dark;
-    g.fillRect(Math.round(x - half), wy, Math.round(half * 2), 1);
-    g.fillStyle = mid;
-    g.fillRect(Math.round(x - half), wy, Math.round(half * 0.8), 1);
-  }
+  const fir = kind === 'fir';
+  const trunk = hz(fir ? '#6a4630' : '#9a5632'), trunkD = hz(fir ? '#4a2e1e' : '#6a3a22');
+  const dark = hz(fir ? '#24503a' : '#2f6a42'), mid = hz(fir ? '#336e4a' : '#43894f'), light = hz(fir ? '#4f8f5a' : '#6aae5f');
+  const tiers = fir ? 5 + Math.floor(r() * 2) : 3 + Math.floor(r() * 2);
+  const crownStart = fir ? 0.14 : 0.3;
+  const maxHalf = fir ? h * 0.17 : h * 0.24;
+  if (outline === undefined) outline = haze > 0.3 ? null : hexToRgb(mix('#2a3a2a', '#c9b8d8', haze));
+  stamp(g, x, baseY, maxHalf * 2 + 4, h, (tg, ox, oy) => {
+    tg.fillStyle = trunk; tg.fillRect(ox - 1, oy - h, 3, h);
+    tg.fillStyle = trunkD; tg.fillRect(ox + 1, oy - h, 1, h);
+    const crownH = h * (1 - crownStart);
+    const tierH = crownH / (tiers - 0.35);
+    for (let t = 0; t < tiers; t++) {
+      const bottom = h * crownStart + t * tierH * 0.78;
+      const top = bottom + tierH;
+      const tierHalf = maxHalf * (1 - t / (tiers + 0.6)) * (0.9 + r() * 0.2);
+      for (let y = Math.round(bottom); y < Math.min(h + 2, Math.round(top)); y++) {
+        const ty = (y - bottom) / tierH;
+        let half = tierHalf * (1 - ty) + 1;
+        const wy = oy - y;
+        // scalloped lower edge
+        if (y === Math.round(bottom)) half *= 0.85;
+        const x0 = Math.round(ox - half), ww = Math.max(2, Math.round(half * 2));
+        tg.fillStyle = mid; tg.fillRect(x0, wy, ww, 1);
+        tg.fillStyle = dark; tg.fillRect(x0 + Math.round(ww * 0.62), wy, Math.ceil(ww * 0.38), 1);
+        tg.fillStyle = light; tg.fillRect(x0, wy, Math.max(1, Math.round(ww * 0.22)), 1);
+        if (y === Math.round(bottom)) {
+          tg.fillStyle = dark;
+          for (let xx = x0; xx < x0 + ww; xx += 3) tg.fillRect(xx, wy + 1, 2, 1);
+        }
+      }
+    }
+    // tip
+    tg.fillStyle = mid; tg.fillRect(ox, oy - h - 1, 1, 2);
+  }, outline);
 }
 
 /** Twisted bristlecone pine, baked as its own little canvas (interactive object). */
@@ -165,7 +212,7 @@ export function makeBristlecone() {
     g.fillStyle = r() < 0.5 ? '#2f5d3a' : '#4a7a50';
     g.fillRect(12 + Math.round(r() * 10), 6 + Math.round(r() * 10), 2, 1);
   }
-  return c;
+  return outlineCanvas(c);
 }
 
 // ---------- background layers ----------
@@ -205,7 +252,7 @@ function bakeLayer(def, viewW) {
     const hh = far ? 14 + r() * 46 : 26 + r() * 90;
     const bY = B + r() * 6;
     if (r() < 0.12) drawPine(g, x, bY - 2, far ? 10 + r() * 8 : 16 + r() * 18, r, 'pine', far ? 0.55 : 0.25);
-    else drawHoodoo(g, x, bY, hw, hh, r, bands, { cap: mix(CAP, '#c9b8d8', far ? 0.5 : 0.2) });
+    else drawHoodoo(g, x, bY, hw, hh, r, bands, { cap: mix(CAP, '#c9b8d8', far ? 0.5 : 0.2), outline: far ? null : hexToRgb(mix('#6a3a36', '#c9b8d8', 0.35)) });
     x += far ? 4 + r() * 9 : 9 + r() * 20;
   }
   // slope beneath the hoodoos
@@ -292,45 +339,71 @@ function bakeNear() {
     g.fillStyle = shade(CAP, 0.2); g.fillRect(x - 9, b - colH - 9, 18, 1);
   }
 
-  // Terrain cross-section (ImageData for speed)
+  // Terrain cross-section (ImageData for speed): cozy cliff face with grass/dirt lip
   const tc = canvas(WORLD_W, H), tg = tc.getContext('2d');
   const img = tg.createImageData(WORLD_W, H);
   const d = img.data;
   const rgbStrata = bands.base.map(hexToRgb);
-  const trail = hexToRgb('#e6c9a0'), trailD = hexToRgb('#c9a27a'), grass = hexToRgb('#8aa35a'), grassD = hexToRgb('#6b8a45');
+  const rgbDark = bands.dark.map(hexToRgb);
+  const rgbLight = bands.light.map(hexToRgb);
+  const C = c => hexToRgb(c);
+  const OUT = C('#4a2a26');
+  const grass = [C('#8fc25a'), C('#6aa04a'), C('#4f8040'), C('#b5dc78')];
+  const dirt = [C('#ecd2a6'), C('#d8b486'), C('#b98d62'), C('#f6e4c2')];
+  // vertical cracks in the cliff
+  const crack = new Uint8Array(WORLD_W);
+  for (let x = 0; x < WORLD_W; x += 9 + Math.floor(r() * 18)) crack[x] = 1;
+  const put = (x, y, col) => {
+    if (y < YTOP || y >= YBOT) return;
+    const idx = ((y - YTOP) * WORLD_W + x) * 4;
+    d[idx] = col[0]; d[idx + 1] = col[1]; d[idx + 2] = col[2]; d[idx + 3] = 255;
+  };
   for (let x = 0; x < WORLD_W; x++) {
     const gy = Math.round(groundY(x));
     const onRim = x < 790 || x > 3720;
+    const top = onRim ? grass : dirt;
     const jitter = Math.sin(x / 31) * 3 + Math.sin(x / 7) * 0.8;
-    for (let y = gy; y < YBOT; y++) {
-      const idx = ((y - YTOP) * WORLD_W + x) * 4;
-      let col;
+    // lip: outline, highlight, body, scalloped overhang
+    put(x, gy - 1, OUT);
+    put(x, gy, top[3]);
+    put(x, gy + 1, top[0]);
+    put(x, gy + 2, top[0]);
+    put(x, gy + 3, top[1]);
+    const drip = 4 + ((x >> 1) % 3 === 0 ? 1 : 0) + ((x * 13) % 7 === 0 ? 1 : 0);
+    for (let y = gy + 4; y < gy + drip; y++) put(x, y, top[1]);
+    put(x, gy + drip, top[2]);
+    put(x, gy + drip + 1, OUT);
+    for (let y = gy + drip + 2; y < YBOT; y++) {
       const dy = y - gy;
-      if (dy < 2) col = onRim && (x * 7919) % 11 < 4 ? grass : trail;
-      else if (dy < 3) col = onRim ? grassD : trailD;
-      else {
-        col = rgbStrata[Math.floor((y + 1000 + jitter) / 7) % rgbStrata.length];
-        // darken with depth for a soft cross-section look
-        const f = Math.max(0.55, 1 - (dy - 3) / 260);
-        col = [col[0] * f, col[1] * f, col[2] * f];
-        if (((x * 31 + y * 17) % 97) === 0) col = [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8];
-      }
-      d[idx] = col[0]; d[idx + 1] = col[1]; d[idx + 2] = col[2]; d[idx + 3] = 255;
+      const bi = Math.floor((y + 1000 + jitter) / 9) % rgbStrata.length;
+      let col = rgbStrata[bi];
+      const inBand = (y + 1000 + jitter) % 9;
+      if (inBand < 1) col = rgbLight[bi];
+      else if (inBand > 7) col = rgbDark[bi];
+      if (crack[x] && ((y + x) % 11) > 3) col = rgbDark[bi];
+      if (crack[x - 1] && ((y + x) % 11) > 3) col = rgbLight[bi];
+      if (dy < drip + 5) col = rgbDark[bi]; // shadow under the lip
+      const f = Math.max(0.72, 1 - (dy - 6) / 420);
+      put(x, y, [col[0] * f, col[1] * f, col[2] * f]);
     }
   }
   tg.putImageData(img, 0, 0);
   g.drawImage(tc, 0, YTOP);
 
-  // Pebbles and grass tufts on the surface
-  for (let x = 0; x < WORLD_W; x += 3 + r() * 12) {
+  // Pebbles, grass tufts and little flowers on the surface
+  for (let x = 0; x < WORLD_W; x += 3 + r() * 10) {
     const gy = Math.round(groundY(x));
     const onRim = x < 790 || x > 3720;
-    if (onRim && r() < 0.6) {
-      g.fillStyle = r() < 0.5 ? '#7a9a4a' : '#9ab86a';
-      g.fillRect(Math.round(x), gy - 2, 1, 2); g.fillRect(Math.round(x) + 1, gy - 1, 1, 1);
+    const xi = Math.round(x);
+    if (onRim && r() < 0.7) {
+      g.fillStyle = '#4f8040'; g.fillRect(xi, gy - 3, 1, 3); g.fillRect(xi + 2, gy - 2, 1, 2);
+      g.fillStyle = '#8fc25a'; g.fillRect(xi + 1, gy - 2, 1, 2);
+      if (r() < 0.12) { g.fillStyle = r() < 0.5 ? '#fff4c0' : '#f4b6c2'; g.fillRect(xi + 1, gy - 3, 1, 1); }
+    } else if (r() < 0.6) {
+      g.fillStyle = '#4a2a26'; g.fillRect(xi, gy - 1, 2, 1);
+      g.fillStyle = r() < 0.5 ? '#c9a07a' : '#f6e6d2'; g.fillRect(xi, gy - 2, 2, 1);
     } else {
-      g.fillStyle = r() < 0.5 ? '#b98a62' : '#f3dcc4';
-      g.fillRect(Math.round(x), gy - 1, r() < 0.3 ? 2 : 1, 1);
+      g.fillStyle = '#6f9a55'; g.fillRect(xi, gy - 2, 1, 2); g.fillRect(xi + 1, gy - 1, 1, 1);
     }
   }
 
@@ -338,10 +411,15 @@ function bakeNear() {
   for (const [a, b] of [[330, 490], [3740, 3900]]) {
     for (let x = a; x <= b; x++) {
       const gy = Math.round(groundY(x));
-      g.fillStyle = '#8a5a32';
-      g.fillRect(x, gy - 9, 1, 1);
-      g.fillRect(x, gy - 5, 1, 1);
-      if ((x - a) % 20 === 0) { g.fillStyle = '#6e4a2c'; g.fillRect(x, gy - 11, 2, 11); }
+      g.fillStyle = '#4a2a26'; g.fillRect(x, gy - 11, 1, 1); g.fillRect(x, gy - 8, 1, 1); g.fillRect(x, gy - 6, 1, 1);
+      g.fillStyle = '#b07a42'; g.fillRect(x, gy - 10, 1, 1);
+      g.fillStyle = '#8a5a32'; g.fillRect(x, gy - 9, 1, 1);
+      g.fillStyle = '#b07a42'; g.fillRect(x, gy - 7, 1, 1);
+      if ((x - a) % 20 === 0) {
+        g.fillStyle = '#4a2a26'; g.fillRect(x - 1, gy - 14, 5, 14);
+        g.fillStyle = '#c08550'; g.fillRect(x, gy - 13, 3, 13);
+        g.fillStyle = '#7a4f2c'; g.fillRect(x + 2, gy - 13, 1, 13);
+      }
     }
   }
   return c;

@@ -1,5 +1,13 @@
-// DOM-based UI on top of the canvas: speech bubbles, menus, dialogue, toast, album.
+// DOM-based UI on top of the canvas: bubbles, menus, dialogue, bag, journal, album, HUD.
+import { ITEMS, itemIcon, LITTER } from './items.js';
+import { NEEDS } from './baby.js';
+
 const $ = id => document.getElementById(id);
+const heartsHTML = h => {
+  let out = '';
+  for (let i = 1; i <= 5; i++) out += h >= i ? '<b class="h full">♥</b>' : h >= i - 0.5 ? '<b class="h half">♥</b>' : '<b class="h">♥</b>';
+  return out;
+};
 
 export class UI {
   constructor(game) {
@@ -9,13 +17,24 @@ export class UI {
     this.dlgEl = $('dialogue');
     this.dlg = null;
     this.toastTimer = null;
+    this.thought = null;
+    this.bagMode = null;
+    this.bagSel = -1;
+    this.journalTab = 'wildlife';
 
     $('menuClose').addEventListener('click', () => this.closeMenu());
-    this.dlgEl.addEventListener('pointerdown', e => { e.stopPropagation(); this.advance(); });
-    for (const el of [this.menuEl, $('hud')]) el.addEventListener('pointerdown', e => e.stopPropagation());
+    $('menuBack').addEventListener('click', () => { const b = this.menuBackFn; if (b) b(); });
+    this.dlgEl.addEventListener('pointerdown', e => { e.stopPropagation(); if (!e.target.closest('#dlgChoices')) this.advance(); });
+    for (const el of [this.menuEl, $('hud'), $('bag'), $('journal'), $('album')]) el.addEventListener('pointerdown', e => e.stopPropagation());
+    $('bagClose').onclick = () => this.closeBag();
+    $('journalClose').onclick = () => { $('journal').hidden = true; };
+    document.querySelectorAll('#journalTabs button').forEach(b => b.addEventListener('click', () => this.openJournal(b.dataset.tab)));
+    $('bag').addEventListener('click', e => { if (e.target.id === 'bag') this.closeBag(); });
+    $('journal').addEventListener('click', e => { if (e.target.id === 'journal') $('journal').hidden = true; });
   }
 
-  get busy() { return !this.menuEl.hidden || !this.dlgEl.hidden; }
+  get busy() { return !this.menuEl.hidden || !this.dlgEl.hidden || !$('bag').hidden || !$('journal').hidden || !$('album').hidden; }
+  get panelOpen() { return !$('bag').hidden || !$('journal').hidden || !$('album').hidden; }
 
   // ----- speech bubbles anchored to world positions -----
   bubble(anchor, text, { dur = 2.4, cls = '' } = {}) {
@@ -23,27 +42,27 @@ export class UI {
     el.className = 'bubble ' + cls;
     el.textContent = text;
     $('bubbles').appendChild(el);
-    const b = { el, anchor, life: dur, key: cls };
+    const b = { el, anchor, life: dur };
     this.bubbles.push(b);
     this.positionBubble(b);
     return b;
   }
-  /** Replace any existing bubble that shares this anchor tag. */
   say(tag, anchor, text, opts) {
     for (const b of this.bubbles) if (b.tag === tag) b.life = Math.min(b.life, 0.01);
     const b = this.bubble(anchor, text, opts);
     b.tag = tag;
     return b;
   }
-  positionBubble(b) {
+  positionBubble(b, dy = 0) {
     const p = b.anchor();
     if (!p) { b.el.style.display = 'none'; return; }
     const s = this.g.toScreen(p.x, p.y);
     b.el.style.display = '';
     b.el.style.left = `${s.x}px`;
-    b.el.style.top = `${s.y}px`;
+    b.el.style.top = `${s.y + dy}px`;
   }
   update(dt) {
+    let babyTalking = false;
     for (const b of this.bubbles) {
       b.life -= dt;
       if (b.life <= 0 && !b.dead) {
@@ -51,12 +70,48 @@ export class UI {
         b.el.classList.add('fade');
         setTimeout(() => b.el.remove(), 450);
       }
-      if (!b.dead) this.positionBubble(b);
+      if (!b.dead) { this.positionBubble(b); if (b.tag === 'baby') babyTalking = true; }
     }
     this.bubbles = this.bubbles.filter(b => !b.dead || b.el.isConnected);
+    if (this.thought) {
+      const p = this.g.babyPos();
+      const s = this.g.toScreen(p.x - this.g.player.dir * 14, p.y - 4);
+      this.thought.style.left = `${s.x}px`;
+      this.thought.style.top = `${s.y - (babyTalking ? 26 : 0)}px`;
+    }
   }
 
-  // ----- place-name toast -----
+  // ----- baby need indicator -----
+  needChanged() {
+    const b = this.g.baby;
+    const n = b.need;
+    const icon = $('needIcon');
+    icon.textContent = n ? NEEDS[n.id].icon : b.napping ? '💤' : '';
+    icon.className = n ? 'l' + n.level : '';
+    if (n) {
+      if (!this.thought) {
+        this.thought = document.createElement('div');
+        this.thought.className = 'bubble thought';
+        this.thought.addEventListener('pointerdown', e => { e.stopPropagation(); this.g.audio.unlock(); this.g.openBabyMenu(); });
+        $('bubbles').appendChild(this.thought);
+      }
+      this.thought.textContent = NEEDS[n.id].icon;
+      this.thought.className = 'bubble thought l' + n.level;
+      this.thought.title = NEEDS[n.id].label;
+    } else if (this.thought) {
+      this.thought.remove();
+      this.thought = null;
+    }
+    this.refreshBaby();
+  }
+  refreshBaby() {
+    const b = this.g.baby;
+    $('babyFace').src = this.g.babyPortrait();
+    $('bondHearts').innerHTML = heartsHTML(this.g.journal.s.bond || 0);
+    $('babyPanel').title = b.status[1];
+  }
+
+  // ----- toast & notifications -----
   toast(name, sub = '') {
     const el = $('toast');
     el.innerHTML = '';
@@ -66,54 +121,87 @@ export class UI {
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
   }
+  notify(text, dur = 3.2) {
+    const box = $('notes');
+    const el = document.createElement('div');
+    el.className = 'note';
+    el.textContent = text;
+    box.appendChild(el);
+    while (box.children.length > 4) box.firstChild.remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 450); }, dur * 1000);
+  }
 
   // ----- action menu -----
-  openMenu(title, actions) {
+  openMenu(title, actions, opts = {}) {
     this.closeDialogue(false);
     $('menuTitle').textContent = title;
+    const p = $('menuPortrait');
+    p.hidden = !opts.portrait;
+    if (opts.portrait) p.src = opts.portrait;
+    $('menuBack').hidden = !opts.back;
+    this.menuBackFn = opts.back || null;
     const box = $('menuActions');
     box.innerHTML = '';
     for (const a of actions) {
       const btn = document.createElement('button');
       btn.textContent = a.label;
+      if (a.primary) btn.className = 'primary';
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        if (!a.keepOpen) this.closeMenu();
         this.g.audio.pop();
+        if (!a.keepOpen) this.closeMenu();
         a.run();
       });
       box.appendChild(btn);
     }
     this.menuEl.hidden = false;
-    this.menuOnClose = null;
   }
-  closeMenu() {
-    if (this.menuEl.hidden) return;
-    this.menuEl.hidden = true;
-    const f = this.menuOnClose; this.menuOnClose = null;
-    if (f) f();
-  }
+  closeMenu() { this.menuEl.hidden = true; }
 
-  // ----- dialogue box with typewriter text -----
-  dialogue(name, pages, onDone) {
+  // ----- dialogue with portrait, hearts and optional choices -----
+  dialogue(name, pages, onDone, portrait = null, hearts = null, choices = null) {
     this.closeMenu();
     if (typeof pages === 'string') pages = [pages];
-    this.dlg = { pages, i: 0, shown: 0, onDone, timer: 0 };
-    $('dlgName').textContent = name;
-    $('dlgName').style.display = name ? '' : 'none';
+    this.dlg = { pages, i: 0, shown: 0, onDone, choices };
+    $('dlgName').textContent = name || '';
+    $('dlgSide').className = portrait || name ? '' : 'none';
+    $('dlgPortraitBox').style.display = portrait ? '' : 'none';
+    if (portrait) $('dlgPortrait').src = portrait;
+    $('dlgHearts').innerHTML = hearts == null ? '' : heartsHTML(hearts);
+    $('dlgChoices').innerHTML = '';
     this.dlgEl.hidden = false;
     this.renderDlg();
   }
+  choice(name, text, options, portrait = null) {
+    this.dialogue(name, [text], null, portrait, null, options);
+  }
   renderDlg() {
     const d = this.dlg;
-    $('dlgText').textContent = d.pages[d.i].slice(0, Math.floor(d.shown));
-    $('dlgNext').style.visibility = d.shown >= d.pages[d.i].length ? 'visible' : 'hidden';
+    const page = d.pages[d.i];
+    $('dlgText').textContent = page.slice(0, Math.floor(d.shown));
+    const done = d.shown >= page.length;
+    const last = d.i === d.pages.length - 1;
+    $('dlgNext').style.visibility = done && !(last && d.choices) ? 'visible' : 'hidden';
+    if (done && last && d.choices && !$('dlgChoices').children.length) {
+      for (const c of d.choices) {
+        const b = document.createElement('button');
+        b.textContent = c.label;
+        b.addEventListener('pointerdown', e => {
+          e.stopPropagation();
+          this.g.audio.pop();
+          this.closeDialogue(false);
+          c.run();
+        });
+        $('dlgChoices').appendChild(b);
+      }
+    }
   }
   advance() {
     const d = this.dlg;
     if (!d) return;
     const page = d.pages[d.i];
     if (d.shown < page.length) { d.shown = page.length; this.renderDlg(); return; }
+    if (d.choices && d.i === d.pages.length - 1) return; // must pick a choice
     d.i++;
     d.shown = 0;
     if (d.i >= d.pages.length) { this.closeDialogue(true); return; }
@@ -131,20 +219,158 @@ export class UI {
     if (!d) return;
     const len = d.pages[d.i].length;
     if (d.shown < len) {
+      const before = Math.floor(d.shown);
       d.shown = Math.min(len, d.shown + dt * 55);
+      if (Math.floor(d.shown) !== before && before % 3 === 0) this.g.audio.blip();
       this.renderDlg();
     }
-  }
-
-  setMood(icon, title) {
-    const m = $('mood');
-    if (m.textContent !== icon) { m.textContent = icon; m.title = title; }
   }
 
   flash() {
     const f = $('flash');
     f.classList.add('on');
     requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
+  }
+
+  // ----- clock -----
+  setClock(t, sky) {
+    const hours = (5.5 + t * 24) % 24;
+    let h = Math.floor(hours), m = Math.floor((hours - h) * 6) * 10;
+    const ampm = h >= 12 ? 'pm' : 'am';
+    h = h % 12 || 12;
+    const str = `${h}:${String(m).padStart(2, '0')} ${ampm}`;
+    if ($('clockTime').textContent !== str) {
+      $('clockTime').textContent = str;
+      $('clockLabel').textContent = sky.label;
+      $('clockIcon').textContent = sky.night ? '🌙' : sky.label === 'Golden hour' || sky.label === 'Sunset' ? '🌅' : sky.label === 'Dawn' || sky.label === 'Dusk' ? '🌄' : '☀️';
+    }
+  }
+
+  // ----- hotbar -----
+  renderHotbar() {
+    const bar = $('hotbar');
+    const bag = this.g.bag;
+    bar.innerHTML = '';
+    const n = window.innerWidth < 700 ? 5 : 7;
+    for (let i = 0; i < n; i++) {
+      const s = bag.slots[i];
+      const el = document.createElement('button');
+      el.className = 'slot';
+      if (s) {
+        el.innerHTML = `<img src="${itemIcon(s.id)}" alt="${ITEMS[s.id].name}">${s.n > 1 ? `<span class="n">${s.n}</span>` : ''}`;
+        el.title = ITEMS[s.id].name;
+      }
+      el.addEventListener('click', () => { this.g.audio.unlock(); if (s) this.quickUse(i); else this.openBag(); });
+      bar.appendChild(el);
+    }
+    if (!$('bag').hidden) this.renderBag();
+  }
+  /** Tap on a hotbar slot: do the obvious thing with that item. */
+  quickUse(i) {
+    const g = this.g, s = g.bag.slots[i];
+    if (!s) return;
+    const def = ITEMS[s.id];
+    if (def.cat === 'care' || def.cat === 'toy') { g.baby.useItem(s.id); return; }
+    this.openBag();
+    this.selectBagSlot(i);
+  }
+
+  // ----- bag -----
+  openBag(opts = {}) {
+    this.closeMenu();
+    this.bagMode = opts.mode || 'view';
+    this.bagTarget = opts.target || null;
+    this.bagSel = -1;
+    $('bagTitle').textContent = this.bagMode === 'give' ? `Give a gift to ${this.bagTarget.name}` : 'Bag';
+    $('bag').hidden = false;
+    this.renderBag();
+    this.selectBagSlot(-1);
+  }
+  closeBag() { $('bag').hidden = true; this.bagMode = null; }
+  renderBag() {
+    const grid = $('bagGrid');
+    grid.innerHTML = '';
+    this.g.bag.slots.forEach((s, i) => {
+      const el = document.createElement('button');
+      el.className = 'slot' + (i === this.bagSel ? ' sel' : '');
+      if (s) el.innerHTML = `<img src="${itemIcon(s.id)}" alt="${ITEMS[s.id].name}">${s.n > 1 ? `<span class="n">${s.n}</span>` : ''}`;
+      el.addEventListener('click', () => this.selectBagSlot(i));
+      grid.appendChild(el);
+    });
+  }
+  selectBagSlot(i) {
+    this.bagSel = i;
+    const s = this.g.bag.slots[i];
+    this.renderBag();
+    const acts = $('bagActions');
+    acts.innerHTML = '';
+    if (!s) {
+      $('bagIcon').src = '';
+      $('bagName').textContent = this.bagMode === 'give' ? 'Pick something to give' : 'Tap an item';
+      $('bagDesc').textContent = this.bagMode === 'give' ? 'Snacks make great gifts. Found something someone lost? Give it back!' : 'Things you pick up on the trail go here.';
+      return;
+    }
+    const def = ITEMS[s.id];
+    $('bagIcon').src = itemIcon(s.id);
+    $('bagName').textContent = def.name + (s.n > 1 ? ` ×${s.n}` : '');
+    let desc = def.desc;
+    if (s.owner) { const o = this.g.entities.find(e => e.id === s.owner); desc += o ? ` It belongs to ${o.name}.` : ''; }
+    $('bagDesc').textContent = desc;
+    for (const a of this.itemActions(i, s, def)) {
+      const b = document.createElement('button');
+      b.textContent = a.label;
+      if (a.primary) b.className = 'primary';
+      b.addEventListener('click', () => { this.g.audio.pop(); a.run(); });
+      acts.appendChild(b);
+    }
+  }
+  itemActions(i, s, def) {
+    const g = this.g, acts = [];
+    const close = () => this.closeBag();
+    if (this.bagMode === 'give') {
+      acts.push({ label: '🎁 Give', primary: true, run: () => { close(); this.bagTarget.receive(g, i); } });
+      return acts;
+    }
+    if (def.cat === 'care' || def.cat === 'toy') acts.push({ label: s.id === 'pacifier' || s.id === 'sock' ? '↩️ Give back to baby' : '👶 Use on baby', primary: true, run: () => { close(); g.baby.useItem(s.id); } });
+    if (def.cat === 'snack') {
+      acts.push({ label: '😋 Eat / drink', run: () => {
+        g.bag.removeAt(i); close();
+        g.ui.say('parent', () => g.parentHead(), s.id === 'water' ? '*gulp* Ahh!' : 'Mmm! Energy for the climb!');
+        g.player.speedBoost = 20; g.audio.sip();
+      } });
+    }
+    if (def.cat === 'litter') {
+      const can = g.entities.find(e => e.name === 'Trash & recycling' && Math.abs(e.x - g.player.x) < 60);
+      if (can) acts.push({ label: '🗑️ Throw away', primary: true, run: () => { close(); g.openEntity(can); } });
+      else acts.push({ label: '🗑️ Find a trash can', run: () => g.ui.notify('Trash cans are at the trailheads and Navajo Loop.') });
+    }
+    if (def.cat === 'nature') {
+      acts.push({ label: '👶 Show baby', run: () => { close(); g.baby.useItem(s.id); } });
+      acts.push({ label: '🌿 Leave it be', primary: true, run: () => {
+        g.bag.removeAt(i); close();
+        g.journal.inc('leftBe');
+        g.events.dropNature(g.player.x + g.player.dir * 8, s.id, true);
+        g.ui.notify('🌿 Returned to nature. Leave No Trace!');
+        if (g.journal.s.leftBe === 1) g.journal.first('helped leave a treasure for the next hiker');
+      } });
+    }
+    if (def.cat === 'lost') {
+      const owner = g.entities.find(e => e.id === s.owner);
+      if (owner && Math.abs(owner.x - g.player.x) < 60) acts.push({ label: `🤝 Return to ${owner.name}`, primary: true, run: () => { close(); owner.receive(g, i); } });
+      else acts.push({ label: '🔎 Find the owner', run: () => g.ui.notify(owner ? `${owner.name} is ${owner.x > g.player.x ? 'further along' : 'back down'} the trail.` : 'Someone on the trail must be missing this.') });
+      acts.push({ label: '👶 Show baby', run: () => { close(); g.baby.useItem(s.id); } });
+    }
+    if (def.cat === 'keepsake') acts.push({ label: '👶 Show baby', run: () => { close(); g.baby.useItem(s.id); } });
+    return acts;
+  }
+
+  // ----- journal -----
+  openJournal(tab = this.journalTab) {
+    this.closeMenu();
+    this.journalTab = tab;
+    document.querySelectorAll('#journalTabs button').forEach(b => b.classList.toggle('sel', b.dataset.tab === tab));
+    this.g.journal.render(tab, $('journalBody'));
+    $('journal').hidden = false;
   }
 }
 
@@ -158,7 +384,7 @@ function savePhotos(list) {
   try { localStorage.setItem(KEY, '[]'); } catch { /* storage unavailable */ }
   return false;
 }
-let sessionPhotos = null; // fallback when storage is unavailable
+let sessionPhotos = null;
 
 export function addPhoto(dataUrl) {
   const list = sessionPhotos ?? loadPhotos();
@@ -197,7 +423,6 @@ export function openAlbum(onClose) {
   };
   $('albumBack').onclick = render;
   $('albumClose').onclick = () => { panel.hidden = true; onClose && onClose(); };
-  panel.onpointerdown = e => e.stopPropagation();
   render();
   panel.hidden = false;
 }

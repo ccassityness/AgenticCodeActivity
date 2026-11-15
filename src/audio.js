@@ -74,6 +74,18 @@ export const sfxs = {
   raven() { if (ctx) { const t = ctx.currentTime; tone(320, t, 0.3, { type: 'sawtooth', vol: 0.06, slideTo: 260 }); tone(300, t + 0.38, 0.28, { type: 'sawtooth', vol: 0.05, slideTo: 250 }); } },
   owl() { if (ctx) { const t = ctx.currentTime; tone(340, t, 0.35, { vol: 0.2, slideTo: 310, attack: 0.08 }); tone(330, t + 0.5, 0.5, { vol: 0.2, slideTo: 300, attack: 0.08 }); } },
   squeak() { if (ctx) { const t = ctx.currentTime; tone(1800, t, 0.06, { vol: 0.08, slideTo: 2400 }); tone(1900, t + 0.09, 0.06, { vol: 0.08, slideTo: 2500 }); } },
+  blip() { if (ctx) tone(660 + Math.random() * 80, ctx.currentTime, 0.04, { type: 'square', vol: 0.025 }); },
+  lullaby() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [392, 330, 392, 330, 294, 330, 262].forEach((f, i) => tone(f, t + i * 0.32, 0.5, { type: 'triangle', vol: 0.12, attack: 0.04 }));
+  },
+  fanfare() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.1, 0.35, { type: 'triangle', vol: 0.14 }));
+  },
+  pickup() { if (!ctx) return; const t = ctx.currentTime; tone(880, t, 0.08, { type: 'square', vol: 0.05 }); tone(1320, t + 0.07, 0.12, { type: 'square', vol: 0.05 }); },
   huff() { if (ctx) noise(ctx.currentTime, 0.25, { freq: 400, vol: 0.15, type: 'lowpass' }); },
 };
 

@@ -49,7 +49,16 @@ function noise(start, dur, { freq = 800, q = 1, vol = 0.2, type = 'bandpass' } =
 }
 
 export const sfxs = {
-  step() { if (ctx) noise(ctx.currentTime, 0.07, { freq: 500 + Math.random() * 300, q: 0.8, vol: 0.12 }); },
+  step(wood) {
+    if (!ctx) return;
+    if (wood) { tone(140 + Math.random() * 30, ctx.currentTime, 0.09, { type: 'triangle', vol: 0.08, slideTo: 110 }); noise(ctx.currentTime, 0.04, { freq: 900, q: 1, vol: 0.05 }); }
+    else noise(ctx.currentTime, 0.07, { freq: 500 + Math.random() * 300, q: 0.8, vol: 0.12 });
+  },
+  manatee() { if (ctx) { const t = ctx.currentTime; noise(t, 0.5, { freq: 700, q: 0.5, vol: 0.22 }); noise(t + 0.6, 0.6, { freq: 400, q: 0.5, vol: 0.12, type: 'lowpass' }); } },
+  splash() { if (ctx) { const t = ctx.currentTime; noise(t, 0.35, { freq: 1400, q: 0.6, vol: 0.2 }); tone(500, t, 0.08, { vol: 0.06, slideTo: 900 }); } },
+  gator() { if (ctx) tone(70, ctx.currentTime, 0.9, { type: 'sawtooth', vol: 0.05, slideTo: 55, attack: 0.1 }); },
+  heron() { if (ctx) { const t = ctx.currentTime; tone(260, t, 0.25, { type: 'sawtooth', vol: 0.05, slideTo: 180 }); } },
+  osprey() { if (!ctx) return; const t = ctx.currentTime; for (let i = 0; i < 5; i++) tone(2200, t + i * 0.12, 0.07, { vol: 0.06, slideTo: 2600 }); },
   chime() { if (!ctx) return; const t = ctx.currentTime; tone(880, t, 0.6, { vol: 0.18 }); tone(1320, t + 0.08, 0.7, { vol: 0.12 }); },
   pop() { if (ctx) tone(520, ctx.currentTime, 0.12, { vol: 0.15, slideTo: 780 }); },
   giggle() {

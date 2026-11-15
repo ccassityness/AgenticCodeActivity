@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#2a1c18">
+  <meta name="theme-color" content="#1e2a26">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="description" content="A cozy illustrated hike through Bryce Canyon with your baby.">
-  <title>Hoodoo Hike</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%237ec3ef'/><path d='M5 16 L6 6 Q8 3 10 6 L11 16Z' fill='%23d9764f'/><ellipse cx='8' cy='5' rx='3.5' ry='1.6' fill='%23f3e6d4'/></svg>">
+  <meta name="description" content="A gentle stroll with your baby along the boardwalk at Blue Spring State Park, Florida — home of the manatees.">
+  <title>Blue Spring Stroll</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%233aa6b4'/><ellipse cx='8' cy='10' rx='6' ry='2.6' fill='%237a7a72'/><circle cx='13' cy='9.4' r='1.4' fill='%237a7a72'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
 </head>
 <body>
   <div id="game">
-    <canvas id="screen" aria-label="Hoodoo Hike game"></canvas>
+    <canvas id="screen" aria-label="Blue Spring Stroll game"></canvas>
     <div id="bubbles"></div>
     <div id="toast"></div>
     <div id="notes"></div>
@@ -24,29 +24,17 @@
     <div id="hud" hidden>
       <button id="babyPanel" class="glass" aria-label="Baby">
         <img id="babyFace" alt="">
-        <span class="col">
-          <span class="row"><span id="babyLabel">Bean</span><span id="needIcon"></span></span>
-          <span id="bondHearts" class="hearts"></span>
-          <span id="stamina" title="Energy"><span id="staminaFill"></span></span>
-        </span>
+        <span class="col"><span class="row"><span id="babyLabel">Bean</span><span id="needIcon"></span></span><small id="babyMood">Happy</small></span>
       </button>
       <div id="clock" class="glass">
         <span id="clockIcon">☀️</span>
         <span class="col"><b id="clockTime">7:00 am</b><small id="clockLabel">Morning</small></span>
         <button id="btnMute" aria-label="Toggle sound">🔊</button>
       </div>
-      <div id="toolbar" class="glass">
-        <div id="hotbar"></div>
-        <span class="sep"></span>
-        <button id="btnBag" class="tool" title="Bag (I)" aria-label="Bag">🎒</button>
-        <button id="btnJournal" class="tool" title="Journal (J)" aria-label="Journal">📔</button>
-        <button id="btnMap" class="tool" title="Map (N)" aria-label="Map">🗺️</button>
+      <div id="tools" class="glass">
+        <button id="btnLook" class="tool" title="Change your look" aria-label="Change your look">👕</button>
         <button id="btnPhoto" class="tool" title="Take photo (P)" aria-label="Take photo">📷</button>
         <button id="btnAlbum" class="tool" title="Photo album" aria-label="Photo album">🖼️</button>
-      </div>
-      <div id="moves">
-        <button id="btnRun" class="round" aria-label="Hold to run">🏃</button>
-        <button id="btnJump" class="round big" aria-label="Jump">⤴</button>
       </div>
     </div>
 
@@ -56,64 +44,25 @@
     </div>
 
     <div id="dialogue" class="glass" hidden>
-      <div id="dlgSide">
-        <div id="dlgPortraitBox"><img id="dlgPortrait" alt=""></div>
-      </div>
+      <div id="dlgPortraitBox"><img id="dlgPortrait" alt=""></div>
       <div id="dlgBody">
-        <div id="dlgHead"><span id="dlgName"></span><span id="dlgHearts" class="hearts"></span></div>
+        <div id="dlgName"></div>
         <div id="dlgText"></div>
-        <div id="dlgChoices"></div>
         <div id="dlgNext">▾</div>
       </div>
     </div>
 
     <div id="flash"></div>
-    <div id="fade"></div>
-
-    <div id="bag" class="panel" hidden>
-      <div class="card">
-        <div class="cardHead"><h2 id="bagTitle">Bag</h2><button class="close" id="bagClose" aria-label="Close">✕</button></div>
-        <div id="bagGrid"></div>
-        <div id="bagDetail">
-          <img id="bagIcon" alt="">
-          <div class="col"><b id="bagName">Tap an item</b><small id="bagDesc">Things you pick up on the trail go here.</small></div>
-          <div id="bagActions"></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="journal" class="panel" hidden>
-      <div class="card">
-        <div class="cardHead"><h2>Hike Journal</h2><button class="close" id="journalClose" aria-label="Close">✕</button></div>
-        <div id="journalTabs">
-          <button data-tab="wildlife">🐾 Wildlife</button>
-          <button data-tab="friends">💛 Friends</button>
-          <button data-tab="story">📜 Story</button>
-          <button data-tab="finds">🎒 Finds</button>
-          <button data-tab="badges">🏅 Badges</button>
-          <button data-tab="baby">👶 Baby</button>
-        </div>
-        <div id="journalBody"></div>
-      </div>
-    </div>
-
-    <div id="map" class="panel" hidden>
-      <div class="card">
-        <div class="cardHead"><h2>Trail Map</h2><button class="close" id="mapClose" aria-label="Close">✕</button></div>
-        <canvas id="mapCanvas"></canvas>
-        <p id="mapInfo"></p>
-      </div>
-    </div>
 
     <div id="album" class="panel" hidden>
       <div class="card">
-        <div class="cardHead"><h2>Trail Photos</h2><button class="close" id="albumClose" aria-label="Close">✕</button></div>
+        <div class="cardHead"><h2>Photos</h2><button class="close" id="albumClose" aria-label="Close">✕</button></div>
         <div id="albumGrid"></div>
-        <p id="albumEmpty">No photos yet — tap 📷 on the trail, or 📸 an animal!</p>
+        <p id="albumEmpty">No photos yet — tap 📷 on the boardwalk to take one!</p>
         <div id="albumView" hidden>
-          <img id="albumImg" alt="Trail photo">
-          <div class="row">
-            <a id="albumSave" class="btn" download="hoodoo-hike.jpg">Save</a>
+          <img id="albumImg" alt="Photo">
+          <div class="row center">
+            <a id="albumSave" class="btn" download="blue-spring.jpg">Save</a>
             <button id="albumDelete" class="btn">Delete</button>
             <button id="albumBack" class="btn">Back</button>
           </div>
@@ -121,34 +70,23 @@
       </div>
     </div>
 
-    <div id="mg" hidden>
-      <canvas id="mgCanvas"></canvas>
-      <div id="mgTop"><div><b id="mgTitle"></b><small id="mgHint"></small></div><button id="mgQuit" aria-label="Quit">✕</button></div>
-      <div id="mgResult" class="glass" hidden>
-        <div id="mgStars"></div>
-        <p id="mgMsg"></p>
-        <div id="mgReward"></div>
-        <div class="row"><button id="mgAgain" class="btn">Play again</button><button id="mgDone" class="btn primary">Done</button></div>
-      </div>
-    </div>
-
-    <div id="title" class="panel">
-      <div class="card titleCard">
-        <div class="titleLeft">
-          <h1>Hoodoo Hike</h1>
-          <p class="sub">A cozy walk through Bryce Canyon</p>
+    <div id="custom" class="panel">
+      <div class="card custCard">
+        <div class="custLeft">
+          <div id="custTitle">
+            <h1>Blue Spring Stroll</h1>
+            <p class="sub">A gentle walk with your baby at Blue Spring State Park, Florida</p>
+          </div>
+          <h2 id="custHeading"></h2>
           <canvas id="preview"></canvas>
-          <button id="startBtn" class="big">Start the hike ▶</button>
-          <p id="saveNote" class="hint" hidden>Your journal, friends and bag are saved.</p>
+          <button id="custRandom" class="btn">🎲 Surprise me</button>
+          <div class="nameRow"><label for="babyName">Baby's name</label><input id="babyName" maxlength="14" autocomplete="off"><button id="nameDice" class="btn small" aria-label="Random name">🎲</button></div>
+          <button id="custGo" class="big">Start the stroll ▶</button>
         </div>
-        <div class="titleRight">
-          <div class="opt"><label>Skin</label><div class="swatches" data-key="skin"></div></div>
-          <div class="opt"><label>Hair</label><div class="swatches" data-key="hair"></div></div>
-          <div class="opt"><label>Style</label><div class="swatches" data-key="style"></div></div>
-          <div class="opt"><label>Shirt</label><div class="swatches" data-key="shirt"></div></div>
-          <div class="opt"><label>Carrier</label><div class="swatches" data-key="carrier"></div></div>
-          <div class="opt"><label for="babyName">Baby</label><input id="babyName" maxlength="12" value="Bean" autocomplete="off"></div>
-          <p class="hint">Tap to walk · tap things to interact · ⤴ jump · 🏃 hold to run<br>Keys: ← → move · Space jump · Shift run · E interact · B baby · I bag · J journal · N map</p>
+        <div class="custRight">
+          <div id="custTabs"></div>
+          <div id="custOpts"></div>
+          <p class="hint">Tap the boardwalk to walk · tap animals, people and signs · tap your baby when they need you. Keys: ← → walk · E interact · B baby · P photo</p>
         </div>
       </div>
     </div>
@@ -156,7 +94,7 @@
 
   <div id="rotate">
     <div class="phone">📱</div>
-    <p>Turn your phone sideways to hike!</p>
+    <p>Turn your phone sideways for the boardwalk!</p>
   </div>
 
   <script type="module" src="src/main.js"></script>

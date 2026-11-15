@@ -47,6 +47,7 @@ export class FX {
   notes(x, y) {
     for (let i = 0; i < 3; i++) this.parts.push({ k: 'note', x: x + (Math.random() - 0.5) * 8, y, vx: 6 + Math.random() * 6, vy: -10, life: 1.6, delay: i * 0.35, wave: true, s: 2.4 });
   }
+  ripple(x, y) { for (let i = 0; i < 3; i++) this.parts.push({ k: 'ripple', x, y, vx: 0, vy: 0, life: 2.2, max: 2.2, delay: i * 0.35, s: 1 }); }
   dust(x, y) { this.parts.push({ k: 'dust', x, y, vx: (Math.random() - 0.5) * 10, vy: -3 - Math.random() * 3, life: 0.6, delay: 0, s: 1 + Math.random() }); }
   emote(anchor, type, dur = 1.8) {
     this.emotes = this.emotes.filter(e => e.anchor !== anchor);
@@ -66,11 +67,12 @@ export class FX {
   draw(ctx, ox, oy) {
     for (const p of this.parts) {
       if (p.delay > 0) continue;
-      ctx.globalAlpha = Math.min(1, p.life * 2);
+      ctx.globalAlpha = p.k === 'ripple' ? 1 : Math.min(1, p.life * 2);
       const x = p.x - ox, y = p.y - oy;
       if (p.k === 'heart') heart(ctx, x, y, p.s);
       else if (p.k === 'sparkle') sparkle(ctx, x, y, p.s);
       else if (p.k === 'note') note(ctx, x, y, p.s);
+      else if (p.k === 'ripple') { const k = 1 - p.life / p.max; ctx.strokeStyle = `rgba(240,250,250,${0.6 * (1 - k)})`; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.ellipse(x, y, 1 + k * 12, 0.3 + k * 0.9, 0, 0, Math.PI * 2); ctx.stroke(); }
       else if (p.k === 'dust') { ctx.fillStyle = 'rgba(220,190,150,0.6)'; circle(ctx, x, y, p.s); ctx.fill(); }
     }
     ctx.globalAlpha = 1;

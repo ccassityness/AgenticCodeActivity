@@ -1,6 +1,6 @@
 // Naturalistic figures drawn with layered, softly shaded shapes (no outlines), in world units.
 // Light comes from the upper left. Figures face right (+x) and are mirrored for left.
-import { shade, mix, rgba, ellipse, circle, lin, rad, canvas, rng } from './color.js';
+import { shade, mix, rgba, ellipse, circle, lin, rad, canvas, rng } from './color.js?v=20261115b';
 
 const TAU = Math.PI * 2;
 

@@ -2,7 +2,7 @@
 // bald cypress, the boardwalk along the clear spring run, the Thursby House on its shell mound,
 // and the dark St. Johns River. Static scenery is baked into cached high-res tiles; water,
 // mist and light are drawn every frame.
-import { mix, shade, rgba, rng, fbm, canvas, grain, ellipse, circle, lin, rad } from './color.js';
+import { mix, shade, rgba, rng, fbm, canvas, grain, ellipse, circle, lin, rad } from './color.js?v=20261115b';
 
 export const WORLD_W = 3600;
 export const YTOP = -60;

@@ -1,19 +1,19 @@
 // Blue Spring Stroll — boot, game state, rendering loop.
-import { drawBabyHead } from './figures.js';
-import { snapshot } from './color.js';
-import { World, groundY, onBoardwalk, zoneAt, WORLD_W, DECK_Y, WATER_Y, drawWater, drawFrontRail, drawMist } from './world.js';
-import { sky, drawSky, drawLight, drawRays, CYCLE_SECONDS } from './timeofday.js';
-import * as audio from './audio.js';
-import { UI, addPhoto, openAlbum } from './ui.js';
-import { Player } from './player.js';
-import { Baby } from './baby.js';
-import { setupInput } from './input.js';
-import { FX } from './fx.js';
-import { Customizer, loadLook, saveLook, randomName } from './custom.js';
+import { drawBabyHead } from './figures.js?v=20261115b';
+import { snapshot } from './color.js?v=20261115b';
+import { World, groundY, onBoardwalk, zoneAt, WORLD_W, DECK_Y, WATER_Y, drawWater, drawFrontRail, drawMist } from './world.js?v=20261115b';
+import { sky, drawSky, drawLight, drawRays, CYCLE_SECONDS } from './timeofday.js?v=20261115b';
+import * as audio from './audio.js?v=20261115b';
+import { UI, addPhoto, openAlbum } from './ui.js?v=20261115b';
+import { Player } from './player.js?v=20261115b';
+import { Baby } from './baby.js?v=20261115b';
+import { setupInput } from './input.js?v=20261115b';
+import { FX } from './fx.js?v=20261115b';
+import { Customizer, loadLook, saveLook, randomName } from './custom.js?v=20261115b';
 import {
   Manatee, Gar, FishSchool, Alligator, Turtles, Wader, Anhinga, Osprey, Otter, Armadillo, Owl,
   Person, Visitor, Sign, Bench, Landmark, Pacifier,
-} from './entities.js';
+} from './entities.js?v=20261115b';
 
 const H = 128, MIN_W = 200, MAX_W = 300, CAM_Y = 10;
 const params = new URLSearchParams(location.search);

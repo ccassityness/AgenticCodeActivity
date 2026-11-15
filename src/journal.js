@@ -14,9 +14,15 @@ export const WILDLIFE = [
   { id: 'butterfly', name: 'Butterflies', a: 'butterflies', icon: '🦋', hint: 'Near wildflowers on sunny days' },
   { id: 'pronghorn', name: 'Pronghorn', a: 'a pronghorn', icon: '🦌', hint: 'Open meadows past Sunset Point' },
   { id: 'owl', name: 'Great horned owl', a: 'a great horned owl', icon: '🦉', hint: 'Only after dark…' },
+  { id: 'wren', name: 'Canyon wren', a: 'a canyon wren', icon: '🐦', hint: 'Listen for falling notes near water…' },
+  { id: 'bluebird', name: 'Mountain bluebird', a: 'a mountain bluebird', icon: '🐦', hint: 'Hovering over a hidden overlook' },
+  { id: 'falcon', name: 'Peregrine falcon', a: 'a peregrine falcon', icon: '🦅', hint: 'Soaring high above natural windows' },
+  { id: 'fox', name: 'Gray fox', a: 'a gray fox', icon: '🦊', hint: 'Trots along the rim at dusk' },
 ];
 
 export const PLACES = ['Rim Trail', 'Sunrise Point', "Queen's Garden Trail", "Queen's Garden", 'Navajo Loop', 'Wall Street', "Thor's Hammer", 'Sunset Point'];
+export const SECRET_AREAS = { seep: 'Hidden Seep', bridges: 'Two Bridges', overlook: 'Moonlit Overlook' };
+import { PAGES } from './story.js';
 
 export const BADGES = [
   { id: 'lnt', icon: '🌲', name: 'Leave No Trace', desc: 'Pack out 5 pieces of litter and leave 3 nature finds be.', test: s => s.litter >= 5 && s.leftBe >= 3 },
@@ -29,6 +35,12 @@ export const BADGES = [
   { id: 'ranger', icon: '🎓', name: 'Junior Ranger', desc: 'Answer 5 of Ranger Rosa\'s quiz questions correctly.', test: s => s.quiz >= 5 },
   { id: 'explorer', icon: '🗺️', name: 'Explorer', desc: 'Visit every place along the trail.', test: s => PLACES.every(p => s.places[p]) },
   { id: 'golden', icon: '🌅', name: 'Golden Hour', desc: 'Stand at Sunset Point during golden hour.', test: s => s.golden },
+  { id: 'secrets', icon: '🧭', name: 'Trailblazer', desc: 'Discover all three hidden side areas.', test: s => Object.keys(SECRET_AREAS).every(a => s.areas[a]) },
+  { id: 'story', icon: '📜', name: 'Keeper of Stories', desc: 'Find every page of the old diary and return them to their owner.', test: s => s.storyDone },
+  { id: 'acrobat', icon: '🧗', name: 'Mountain Goat', desc: 'Climb to the Two Bridges lookout.', test: s => s.lookout },
+  { id: 'stargazer', icon: '🌌', name: 'Stargazer', desc: 'Trace 4 different constellations.', test: s => Object.keys(s.consts || {}).length >= 4 },
+  { id: 'wildshot', icon: '🖼️', name: 'Wildlife Photographer', desc: 'Earn 3 stars photographing 5 kinds of animals.', test: s => Object.values(s.shots || {}).filter(v => v >= 3).length >= 5 },
+  { id: 'rainbow', icon: '🌈', name: 'After the Storm', desc: 'See a rainbow over the canyon.', test: s => s.rainbow },
 ];
 
 function fresh() {
@@ -36,6 +48,7 @@ function fresh() {
     seen: {}, met: {}, hearts: {}, gifted: {}, places: {}, finds: {}, badges: {},
     litter: 0, leftBe: 0, returned: 0, needsMet: 0, photos: 0, quiz: 0, golden: false,
     hikersMet: [], firsts: [], bond: 0, bag: null, hikes: 0,
+    areas: {}, pages: {}, storyDone: false, lookout: false, consts: {}, shots: {}, games: {}, rainbow: false,
   };
 }
 
@@ -69,7 +82,6 @@ export class Journal {
     this.s.seen[id] = true;
     const w = WILDLIFE.find(x => x.id === id);
     if (w) this.g.ui.notify(`${w.icon} New journal entry: ${w.name}`);
-    this.first(`saw ${w ? w.a : id} for the first time`);
     this.check(); this.mark();
     return true;
   }
@@ -141,10 +153,24 @@ export class Journal {
       html = '<div class="jgrid">' + BADGES.map(b => s.badges[b.id]
         ? `<div class="jcard badge"><div class="ji">${b.icon}</div><b>${b.name}</b><small>${b.desc}</small></div>`
         : `<div class="jcard locked"><div class="ji grey">${b.icon}</div><b>${b.name}</b><small>${b.desc}</small></div>`).join('') + '</div>';
+    } else if (tab === 'story') {
+      const got = PAGES.filter(p => s.pages[p.id]);
+      html = `<p class="jnote">An old hiking diary, its pages scattered by the wind. Found <b>${got.length}</b> of ${PAGES.length}. ${s.storyDone ? 'Returned to Walt ♥' : ''}</p>`;
+      html += PAGES.map(p => s.pages[p.id]
+        ? `<div class="page"><b>${p.title}</b><p>${p.text}</p></div>`
+        : `<div class="page locked"><b>Missing page</b><p>${['Somewhere high in the canyon…', 'Up off the ground, hidden from view…', 'Near the sound of water…', 'Higher than you\'d think to look…', 'Beyond the natural windows…', 'Where the stars are brightest…'][p.id - 1]}</p></div>`).join('');
+      html += '<h3>Hidden places</h3>' + Object.entries(SECRET_AREAS).map(([k, n]) => `<div class="jrow ${s.areas[k] ? '' : 'locked'}"><span>${s.areas[k] ? '🧭 <b>' + n + '</b>' : '❔ ???'}</span></div>`).join('');
     } else if (tab === 'baby') {
       const name = this.g.baby.name;
       html = `<div class="jrow"><span>👶 <b>${name}</b> · bond</span>${heartRow(s.bond)}</div>`;
       html += `<p class="jnote">Needs cared for: <b>${s.needsMet}</b> · Photos taken: <b>${s.photos}</b> · Quiz answers: <b>${s.quiz}</b></p>`;
+      const G = s.games || {}, st = n => n ? '★'.repeat(n) + '☆'.repeat(3 - n) : '—';
+      html += `<h3>Mini-game bests</h3><div class="jlist">
+        <div class="jrow"><span>🙈 Peekaboo</span><b class="stars">${st(G.peekaboo)}</b></div>
+        <div class="jrow"><span>🎵 Lullaby</span><b class="stars">${st(G.lullaby)}</b></div>
+        <div class="jrow"><span>📣 Canyon echo</span><b class="stars">${st(G.echo)}</b></div>
+        <div class="jrow"><span>✨ Constellations traced</span><b>${Object.keys(s.consts || {}).join(', ') || '—'}</b></div>
+        <div class="jrow"><span>📸 Wildlife photos</span><b>${Object.entries(s.shots || {}).map(([k, v]) => (WILDLIFE.find(w => w.id === k)?.icon || '') + '★'.repeat(v)).join(' ') || '—'}</b></div></div>`;
       html += '<h3>Firsts</h3>' + (s.firsts.length
         ? '<ul class="firsts">' + s.firsts.slice().reverse().map(f => `<li>${name} ${f.text}<small>${f.when}</small></li>`).join('') + '</ul>'
         : '<p class="jnote">Every first moment on the trail will be written here.</p>');

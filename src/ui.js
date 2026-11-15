@@ -25,7 +25,9 @@ export class UI {
     $('menuClose').addEventListener('click', () => this.closeMenu());
     $('menuBack').addEventListener('click', () => { const b = this.menuBackFn; if (b) b(); });
     this.dlgEl.addEventListener('pointerdown', e => { e.stopPropagation(); if (!e.target.closest('#dlgChoices')) this.advance(); });
-    for (const el of [this.menuEl, $('hud'), $('bag'), $('journal'), $('album')]) el.addEventListener('pointerdown', e => e.stopPropagation());
+    for (const el of [this.menuEl, $('hud'), $('bag'), $('journal'), $('album'), $('map')]) el.addEventListener('pointerdown', e => e.stopPropagation());
+    $('mapClose').onclick = () => { $('map').hidden = true; };
+    $('map').addEventListener('click', e => { if (e.target.id === 'map') $('map').hidden = true; });
     $('bagClose').onclick = () => this.closeBag();
     $('journalClose').onclick = () => { $('journal').hidden = true; };
     document.querySelectorAll('#journalTabs button').forEach(b => b.addEventListener('click', () => this.openJournal(b.dataset.tab)));
@@ -33,8 +35,60 @@ export class UI {
     $('journal').addEventListener('click', e => { if (e.target.id === 'journal') $('journal').hidden = true; });
   }
 
-  get busy() { return !this.menuEl.hidden || !this.dlgEl.hidden || !$('bag').hidden || !$('journal').hidden || !$('album').hidden; }
-  get panelOpen() { return !$('bag').hidden || !$('journal').hidden || !$('album').hidden; }
+  get busy() { return !this.menuEl.hidden || !this.dlgEl.hidden || this.panelOpen || this.g.minigames?.on; }
+  get panelOpen() { return !$('bag').hidden || !$('journal').hidden || !$('album').hidden || !$('map').hidden; }
+
+  setStamina(v, running) {
+    const bar = $('staminaFill');
+    const w = Math.round(v) + '%';
+    if (bar.style.width !== w) bar.style.width = w;
+    bar.className = v < 15 ? 'low' : running ? 'run' : '';
+  }
+
+  // ----- trail map -----
+  openMap() {
+    this.closeMenu();
+    const g = this.g, j = g.journal.s;
+    const cv = $('mapCanvas');
+    const W = 640, H = 300, dpr = 2;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const c = cv.getContext('2d');
+    c.scale(dpr, dpr);
+    c.fillStyle = '#f3e3c0'; c.fillRect(0, 0, W, H);
+    c.strokeStyle = 'rgba(160,110,60,0.15)'; c.lineWidth = 1;
+    for (let x = 0; x < W; x += 20) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    for (let y = 0; y < H; y += 20) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+    const T = g.areas.trail;
+    const mx = x => 30 + x / T.width * (W - 60), my = y => 60 + (y - 90) * 0.9;
+    // amphitheater shading
+    c.fillStyle = 'rgba(217,118,79,0.25)';
+    c.beginPath(); c.moveTo(mx(780), my(100)); for (let x = 780; x <= 3760; x += 20) c.lineTo(mx(x), my(T.groundY(x))); c.lineTo(mx(3760), my(100)); c.fill();
+    c.strokeStyle = '#8a5a32'; c.lineWidth = 3; c.setLineDash([7, 4]);
+    c.beginPath(); for (let x = 0; x <= T.width; x += 10) c.lineTo(mx(x), my(T.groundY(x))); c.stroke();
+    c.setLineDash([]);
+    c.font = 'bold 12px Nunito, sans-serif'; c.fillStyle = '#4a2e1e'; c.textAlign = 'center';
+    for (const [name, x, dy] of [['Sunrise Point', 400, -12], ["Queen's Garden", 1850, -14], ['Wall Street', 2760, 22], ["Thor's Hammer", 3420, -12], ['Sunset Point', 3820, -12], ['Rim Trail', 4500, -12]]) c.fillText(name, mx(x), my(T.groundY(x)) + dy);
+    const spots = [['seep', 2065, 'Hidden Seep'], ['bridges', 2400, 'Two Bridges'], ['overlook', 4565, 'Moonlit Overlook']];
+    for (const [id, x, name] of spots) {
+      const px = mx(x) + (id === 'bridges' ? 40 : id === 'seep' ? -30 : 0), py = my(T.groundY(x)) + (id === 'overlook' ? -40 : 50);
+      c.strokeStyle = '#8a5a32'; c.lineWidth = 1.5; c.setLineDash([3, 3]);
+      c.beginPath(); c.moveTo(mx(x), my(T.groundY(x))); c.lineTo(px, py); c.stroke(); c.setLineDash([]);
+      c.fillStyle = j.areas[id] ? '#3f8f5a' : '#b8a080';
+      c.beginPath(); c.arc(px, py, 9, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#fff'; c.font = 'bold 11px sans-serif'; c.fillText(j.areas[id] ? '✓' : '?', px, py + 4);
+      c.fillStyle = '#4a2e1e'; c.font = '11px Nunito, sans-serif'; c.fillText(j.areas[id] ? name : '???', px, py + (id === 'overlook' ? -14 : 22));
+    }
+    // you are here
+    let yx = g.player.x;
+    if (g.area.id !== 'trail') yx = spots.find(s => s[0] === g.area.id)?.[1] ?? yx;
+    const px = mx(yx), py = my(T.groundY(yx));
+    c.fillStyle = '#d4504f'; c.beginPath(); c.arc(px, py, 6 + Math.sin(g.now * 4), 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#d4504f'; c.font = 'bold 11px sans-serif'; c.fillText('You', px, py - 10);
+    const pages = Object.keys(j.pages || {}).length;
+    $('mapInfo').innerHTML = `📜 Diary pages: <b>${pages}/6</b> · 🧭 Hidden places: <b>${Object.keys(j.areas || {}).length}/3</b> · 🐾 Animals: <b>${Object.keys(j.seen).length}/13</b>`;
+    $('map').hidden = false;
+  }
 
   // ----- speech bubbles anchored to world positions -----
   bubble(anchor, text, { dur = 2.4, cls = '' } = {}) {
@@ -160,6 +214,7 @@ export class UI {
 
   // ----- dialogue with portrait, hearts and optional choices -----
   dialogue(name, pages, onDone, portrait = null, hearts = null, choices = null) {
+    if (this.dlg) { (this.dlgQueue || (this.dlgQueue = [])).push([name, pages, onDone, portrait, hearts, choices]); return; }
     this.closeMenu();
     if (typeof pages === 'string') pages = [pages];
     this.dlg = { pages, i: 0, shown: 0, onDone, choices };
@@ -213,6 +268,8 @@ export class UI {
     this.dlg = null;
     this.dlgEl.hidden = true;
     if (fire && d.onDone) d.onDone();
+    if (!fire) this.dlgQueue = [];
+    else if (this.dlgQueue?.length && !this.dlg) this.dialogue(...this.dlgQueue.shift());
   }
   tickDialogue(dt) {
     const d = this.dlg;
